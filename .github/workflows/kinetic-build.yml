@@ -26,7 +26,21 @@ jobs:
       - name: Run tests
         run: npm test
       - name: Build production PWA
-        run: npm run build
+        id: production-build
+        continue-on-error: true
+        run: npm run build > build.log 2>&1
+      - name: Upload build diagnostics
+        if: steps.production-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinetic-build-log
+          path: build.log
+          if-no-files-found: error
+      - name: Stop on production build failure
+        if: steps.production-build.outcome == 'failure'
+        run: |
+          cat build.log
+          exit 1
       - name: Normalize release metadata
         run: cp public/manifest.webmanifest dist/manifest.webmanifest
       - name: List production output
