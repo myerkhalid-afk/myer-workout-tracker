@@ -1,6 +1,8 @@
 export type MuscleGroup = 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'core' | 'cardio'
 export type SetType = 'warmup' | 'working' | 'drop' | 'assisted'
 export type CardioType = 'cycling' | 'running' | 'treadmill' | 'squash' | 'walking' | 'other'
+export type ActivityVisibility = 'private' | 'connections'
+export type PartnerConnectionStatus = 'not-connected' | 'pending' | 'connected'
 
 export interface Profile {
   id: string
@@ -12,6 +14,7 @@ export interface Profile {
   defaultReps: number
   avatarInitials: string
   isPartner?: boolean
+  email?: string
 }
 
 export interface ExerciseDefinition {
@@ -50,6 +53,13 @@ export interface StrengthWorkout {
   exercises: StrengthExercise[]
   notes?: string
   completed: boolean
+  averageHr?: number
+  maxHr?: number
+  activeCalories?: number
+  totalCalories?: number
+  effort?: number
+  visibility?: ActivityVisibility
+  source?: 'kinetic' | 'apple-health' | 'manual' | 'import'
 }
 
 export interface CardioSession {
@@ -68,6 +78,9 @@ export interface CardioSession {
   indoor: boolean
   zoneMinutes?: Record<string, number>
   notes?: string
+  visibility?: ActivityVisibility
+  source?: 'kinetic' | 'apple-health' | 'manual' | 'import'
+  linkedWorkoutId?: string
 }
 
 export interface RecoveryEntry {
@@ -101,6 +114,38 @@ export interface BodyMetric {
   source?: 'manual' | 'inbody' | 'apple-health'
 }
 
+export interface SocialComment {
+  id: string
+  activityId: string
+  authorProfileId: string
+  body: string
+  createdAt: string
+}
+
+export interface SocialReaction {
+  id: string
+  activityId: string
+  authorProfileId: string
+  emoji: string
+  createdAt: string
+}
+
+export interface PartnerSettings {
+  status: PartnerConnectionStatus
+  partnerProfileId: string
+  partnerEmail: string
+  shareWorkouts: boolean
+  shareCardio: boolean
+  shareRecovery: boolean
+  shareBodyMetrics: boolean
+}
+
+export interface SocialState {
+  partner: PartnerSettings
+  comments: SocialComment[]
+  reactions: SocialReaction[]
+}
+
 export interface KineticState {
   version: number
   onboarded: boolean
@@ -112,6 +157,7 @@ export interface KineticState {
   bodyMetrics: BodyMetric[]
   theme: 'dark' | 'light' | 'system'
   cloudEnabled: boolean
+  social: SocialState
 }
 
 export interface CoachInsight {
@@ -130,4 +176,16 @@ export interface WorkoutRecommendation {
   reasons: string[]
   exercises?: Array<{ name: string; sets: number; reps: string; weight: string; rest: string }>
   cardio?: { type: string; duration: string; target: string }
+}
+
+export type MuscleReadinessStatus = 'ready' | 'available' | 'recovering' | 'rest'
+
+export interface MuscleReadinessItem {
+  muscle: Exclude<MuscleGroup, 'cardio'>
+  label: string
+  score: number
+  fatigue: number
+  status: MuscleReadinessStatus
+  lastTrained?: string
+  reason: string
 }
