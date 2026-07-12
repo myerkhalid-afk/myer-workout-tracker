@@ -1,0 +1,17 @@
+{
+  "commit": "34c4be31b02a31c099a985fafb86f5fdde0e8543",
+  "files": [
+    "assets/index-B2HRyEvt.js",
+    "assets/index-DTYDuPsc.css",
+    "assets/workbox-window.prod.es5-BBnX5xw4.js",
+    "icons/apple-touch-icon.png",
+    "icons/favicon.svg",
+    "icons/icon-192.png",
+    "icons/icon-512.png",
+    "icons/maskable-512.png",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js",
+    "workbox-9c191d2f.js"
+  ]
+}
