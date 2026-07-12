@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { KineticState } from '../types'
-import { defaultSocialState, initialState, myerJuly11Cardio, myerJuly11Workout } from '../data/seed'
+import { defaultSocialState, initialState } from '../data/seed'
 
 interface StateRecord { id: 'kinetic'; data: KineticState; updatedAt: string }
 
@@ -16,22 +16,22 @@ export const db = new KineticDatabase()
 
 function migrateState(input: KineticState): KineticState {
   const state = structuredClone(input) as KineticState
-  if ((state.version ?? 1) < 2) {
-    state.workouts = (state.workouts ?? []).filter((workout) => workout.id !== 'w-yusma-2026-07-08')
-    if (!state.workouts.some((workout) => workout.id === myerJuly11Workout.id)) state.workouts.unshift(structuredClone(myerJuly11Workout))
-    if (!state.cardio.some((session) => session.id === myerJuly11Cardio.id)) state.cardio.unshift(structuredClone(myerJuly11Cardio))
-    state.profiles = state.profiles.map((profile) => profile.id === 'yusma' ? { ...profile, name: 'Yusma Khan', avatarInitials: 'YK', email: 'yusmakhan99@gmail.com' } : profile)
-    state.social = structuredClone(defaultSocialState)
-    state.version = 2
-  }
-  if (!state.social) state.social = structuredClone(defaultSocialState)
+  state.workouts = (state.workouts ?? []).filter((workout) => workout.id !== 'w-yusma-2026-07-08')
+  state.cardio = state.cardio ?? []
+  state.recovery = state.recovery ?? []
+  state.bodyMetrics = state.bodyMetrics ?? []
+  state.vo2Tests = state.vo2Tests ?? []
+  state.profiles = state.profiles ?? []
+  state.social = state.social ?? structuredClone(defaultSocialState)
+  state.cloudEnabled = true
+  state.version = 3
   return state
 }
 
 export async function loadState(): Promise<KineticState> {
   const record = await db.state.get('kinetic')
   const migrated = migrateState(record?.data ?? structuredClone(initialState))
-  if (record && migrated.version !== record.data.version) await saveState(migrated)
+  if (!record || migrated.version !== record.data.version || !('vo2Tests' in record.data)) await saveState(migrated)
   return migrated
 }
 
