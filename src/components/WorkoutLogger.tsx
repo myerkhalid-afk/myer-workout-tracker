@@ -11,6 +11,7 @@ const kgToLb = (kg: number) => Math.round((kg / 0.453592) * 2) / 2
 
 interface DraftSet { id: string; type: SetType; weightLb: number; reps: number; rpe?: number; rir?: number; completed: boolean }
 interface DraftExercise { id: string; exerciseId: string; sets: DraftSet[]; notes: string; expanded: boolean }
+interface WorkoutLoggerProps { onClose: () => void; initialTitle?: string; initialExerciseIds?: string[] }
 
 function previousSets(exerciseId: string, workouts: StrengthWorkout[]) {
   for (const workout of workouts) {
@@ -24,18 +25,19 @@ function newSet(weightLb = 0, reps = 12): DraftSet {
   return { id: crypto.randomUUID(), type: 'working', weightLb, reps, completed: false }
 }
 
-export function WorkoutLogger({ onClose }: { onClose: () => void }) {
+export function WorkoutLogger({ onClose, initialTitle, initialExerciseIds }: WorkoutLoggerProps) {
   const { state, addWorkout } = useApp()
   const profile = state?.profiles.find((p) => p.id === state.activeProfileId)
   const recentWorkouts = useMemo(() => [...(state?.workouts ?? [])].filter((w) => w.profileId === state?.activeProfileId).sort((a, b) => b.date.localeCompare(a.date)), [state])
-  const defaultExercises = ['leg-press', 'rdl', 'leg-curl'].map((exerciseId) => {
+  const defaultExerciseIds = initialExerciseIds?.length ? initialExerciseIds : ['leg-press', 'rdl', 'leg-curl']
+  const defaultExercises = defaultExerciseIds.map((exerciseId) => {
     const previous = previousSets(exerciseId, recentWorkouts)
     return {
       id: crypto.randomUUID(), exerciseId, notes: '', expanded: true,
       sets: previous.length ? previous.slice(0, 3).map((s: StrengthSet) => ({ id: crypto.randomUUID(), type: s.type, weightLb: kgToLb(s.weightKg), reps: s.reps, rpe: s.rpe, rir: s.rir, completed: false })) : [newSet(0, profile?.defaultReps ?? 12), newSet(0, profile?.defaultReps ?? 12), newSet(0, profile?.defaultReps ?? 12)]
     }
   })
-  const [title, setTitle] = useState('Lower Body Strength')
+  const [title, setTitle] = useState(initialTitle ?? 'Lower Body Strength')
   const [draft, setDraft] = useState<DraftExercise[]>(defaultExercises)
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
