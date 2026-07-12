@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import { AppProvider } from './store/AppContext'
 import './styles.css'
+import './kinetic-v11.css'
 
 registerSW({ immediate: true })
 
