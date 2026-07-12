@@ -32,14 +32,23 @@ jobs:
         run: npm test
       - name: Build production PWA
         run: npm run build
-      - name: Verify deterministic private release
+      - name: List production output
+        run: find dist -maxdepth 3 -type f -printf '%P\n' | sort
+      - name: Verify deterministic assets
         run: |
           test -f dist/assets/app.js
           test -f dist/assets/app.css
-          test -f dist/manifest.webmanifest
           test -f dist/sw.js
+      - name: Verify privacy-safe manifest
+        run: |
+          test -f dist/manifest.webmanifest
           grep -F 'Private strength, cardio, recovery, coaching and partner accountability.' dist/manifest.webmanifest
-          ! grep -R -E 'Myer|Yusma|myer\.khalid|yusmakhan' dist --include='*.html' --include='*.js' --include='*.css' --include='*.json' --include='*.webmanifest'
+      - name: Verify no personal seed data in release
+        run: |
+          if grep -R -E 'Myer|Yusma|myer\.khalid|yusmakhan' dist --include='*.html' --include='*.js' --include='*.css' --include='*.json' --include='*.webmanifest'; then
+            echo 'Personal seed data found in release.' >&2
+            exit 1
+          fi
       - name: Create release manifest
         run: |
           node --input-type=module <<'NODE'
