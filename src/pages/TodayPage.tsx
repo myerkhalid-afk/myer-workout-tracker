@@ -9,16 +9,30 @@ import { Card, PageHeader, Pill, Sheet } from '../components/Primitives'
 import { ReadinessRing } from '../components/ReadinessRing'
 import { MuscleReadinessMap } from '../components/MuscleReadinessMap'
 import { RecoveryCheckin } from '../components/RecoveryCheckin'
-import { WorkoutLogger } from '../components/WorkoutLogger'
+import { WorkoutLogger, type InitialExercisePrescription } from '../components/WorkoutLogger'
 import { CardioLogger } from '../components/CardioLogger'
 import { ScreenshotImport } from '../components/ScreenshotImport'
 import { getLocalGreeting } from '../utils/time'
 import { getActiveIdentity } from '../utils/identity'
 
-const COACH_WORKOUTS = {
-  'Upper body strength': ['incline-db-press', 'lat-pulldown', 'one-arm-db-row', 'seated-db-shoulder', 'ez-curl', 'rope-pushdown'],
-  'Lower body strength': ['leg-press', 'rdl', 'leg-curl', 'leg-extension', 'calf-raise', 'cable-crunch']
-} as const
+const COACH_WORKOUTS: Record<string, InitialExercisePrescription[]> = {
+  'Upper body strength': [
+    { exerciseId: 'incline-db-press', sets: 3, reps: 8 },
+    { exerciseId: 'lat-pulldown', sets: 3, reps: 8 },
+    { exerciseId: 'one-arm-db-row', sets: 3, reps: 10 },
+    { exerciseId: 'seated-db-shoulder', sets: 3, reps: 8 },
+    { exerciseId: 'ez-curl', sets: 2, reps: 10 },
+    { exerciseId: 'rope-pushdown', sets: 2, reps: 10 }
+  ],
+  'Lower body strength': [
+    { exerciseId: 'leg-press', sets: 3, reps: 8 },
+    { exerciseId: 'rdl', sets: 3, reps: 8 },
+    { exerciseId: 'leg-curl', sets: 3, reps: 10 },
+    { exerciseId: 'leg-extension', sets: 2, reps: 12 },
+    { exerciseId: 'calf-raise', sets: 2, reps: 12 },
+    { exerciseId: 'cable-crunch', sets: 2, reps: 12 }
+  ]
+}
 
 export function TodayPage() {
   const { state, session } = useApp()
@@ -38,7 +52,7 @@ export function TodayPage() {
   const totalSets = state.workouts.filter((w) => w.profileId === state.activeProfileId).flatMap((w) => w.exercises).flatMap((e) => e.sets).filter((s) => s.completed && s.type !== 'warmup').length
   const recentWorkout = state.workouts.find((w) => w.profileId === state.activeProfileId)
   const recentVolume = recentWorkout?.exercises.reduce((sum, e) => sum + e.sets.filter((set) => set.completed && set.type !== 'warmup').reduce((s, set) => s + set.weightKg * set.reps, 0), 0) ?? 0
-  const coachExerciseIds = recommendation.title in COACH_WORKOUTS ? [...COACH_WORKOUTS[recommendation.title as keyof typeof COACH_WORKOUTS]] : undefined
+  const coachExercises = COACH_WORKOUTS[recommendation.title]
 
   return <>
     <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`${getLocalGreeting()}, ${identity.firstName}`} action={<button className="icon-button primary" aria-label="Add to Kinetic" onClick={() => setModal('add')}><Plus size={20} /></button>} />
@@ -94,7 +108,7 @@ export function TodayPage() {
     </Sheet>}
     {modal === 'recovery' && <RecoveryCheckin onClose={() => setModal(null)} />}
     {modal === 'strength' && <WorkoutLogger onClose={() => setModal(null)} />}
-    {modal === 'coach-strength' && <WorkoutLogger onClose={() => setModal(null)} initialTitle={recommendation.title} initialExerciseIds={coachExerciseIds} />}
+    {modal === 'coach-strength' && <WorkoutLogger onClose={() => setModal(null)} initialTitle={recommendation.title} initialExercises={coachExercises} />}
     {modal === 'cardio' && <CardioLogger onClose={() => setModal(null)} />}
     {modal === 'import' && <ScreenshotImport onClose={() => setModal(null)} />}
   </>
