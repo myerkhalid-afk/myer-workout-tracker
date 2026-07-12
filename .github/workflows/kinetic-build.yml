@@ -1,0 +1,52 @@
+name: Kinetic Build
+
+on:
+  push:
+    branches:
+      - feature/kinetic-cloud-sync
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run tests
+        run: npm test
+      - name: Build production PWA
+        run: npm run build
+      - name: Create release manifest
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          import path from 'node:path'
+          const allowed = new Set(['.html', '.js', '.css', '.json', '.svg', '.webmanifest', '.txt'])
+          const walk = (dir, prefix = '') => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+            const rel = path.posix.join(prefix, entry.name)
+            return entry.isDirectory() ? walk(path.join(dir, entry.name), rel) : allowed.has(path.extname(entry.name)) ? [rel] : []
+          })
+          const files = walk('dist').sort()
+          fs.writeFileSync('dist/release-manifest.json', JSON.stringify({ commit: process.env.GITHUB_SHA, files }, null, 2))
+          NODE
+      - name: Publish static release branch
+        run: |
+          cp -R dist /tmp/kinetic-dist
+          git config user.name "Kinetic Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan release-static-worktree
+          git rm -rf .
+          cp -R /tmp/kinetic-dist/. .
+          git add -A
+          git commit -m "release: Kinetic ${GITHUB_SHA}"
+          git push origin HEAD:release/kinetic-static --force
