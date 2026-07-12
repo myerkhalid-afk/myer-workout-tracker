@@ -1,0 +1,46 @@
+name: Lint baseline diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lint-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: |
+          sed -i 's#https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/#https://registry.npmjs.org/#g' package-lock.json
+          npm ci --no-audit --no-fund
+      - name: Run and report lint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set +e
+          npm run lint > lint.log 2>&1
+          status=$?
+          {
+            echo '### Main-branch lint diagnostic'
+            echo
+            echo '```text'
+            tail -n 80 lint.log
+            echo '```'
+            echo
+            echo "Exit status: $status"
+          } > comment.md
+          gh pr comment "$PR_NUMBER" --body-file comment.md
+          exit 0
