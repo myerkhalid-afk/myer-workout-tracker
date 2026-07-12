@@ -256,13 +256,55 @@ async function remove(session: CloudSession, table: string, filter: string) {
   await rest(session, `${table}?${filter}`, { method: 'DELETE' }, 'return=minimal')
 }
 
-function ownProfileIds(state: KineticState, session: CloudSession) {
-  return new Set([state.activeProfileId, session.user.id, 'myer', 'local'])
+interface ConnectionRow {
+  requester_id: string
+  addressee_id: string
+  status: string
+}
+
+function identityToken(value?: string) {
+  return (value ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function emailIdentityTokens(email: string) {
+  const localPart = email.trim().toLowerCase().split('@')[0] ?? ''
+  const compact = identityToken(localPart).replace(/\d+$/g, '')
+  const parts = localPart.split(/[^a-z0-9]+/).map((part) => identityToken(part).replace(/\d+$/g, '')).filter(Boolean)
+  return [...new Set([compact, ...parts].filter(Boolean))]
+}
+
+function profileMatchesSession(profile: Profile, session: CloudSession) {
+  if (profile.id === session.user.id) return true
+  if (profile.email?.trim().toLowerCase() === session.user.email.trim().toLowerCase()) return true
+  const candidates = [profile.id, profile.firstName, profile.name.split(/\s+/)[0]]
+    .map(identityToken)
+    .filter((candidate) => candidate.length >= 3 && !['local', 'athlete', 'kinetic'].includes(candidate))
+  const emailTokens = emailIdentityTokens(session.user.email)
+  return candidates.some((candidate) => emailTokens.some((emailToken) => emailToken === candidate || (candidate.length >= 4 && emailToken.length >= 5 && emailToken.startsWith(candidate))))
+}
+
+export function ownProfileIds(state: KineticState, session: CloudSession) {
+  const owned = new Set<string>([session.user.id])
+  const matchingProfiles = state.profiles.filter((profile) => profileMatchesSession(profile, session))
+  matchingProfiles.forEach((profile) => owned.add(profile.id))
+
+  if (matchingProfiles.length === 0 && !state.profiles.some((profile) => profile.id === session.user.id)) {
+    const genericLocal = state.profiles.find((profile) => profile.id === 'local' && (identityToken(profile.firstName) === 'athlete' || identityToken(profile.name) === 'kineticathlete'))
+    if (genericLocal) owned.add(genericLocal.id)
+  }
+
+  return owned
+}
+
+export function partnerProfileIdForSession(connections: ConnectionRow[], userId: string) {
+  const connection = connections.find((item) => item.requester_id === userId || item.addressee_id === userId)
+  if (!connection || connection.status !== 'accepted') return ''
+  return connection.requester_id === userId ? connection.addressee_id : connection.requester_id
 }
 
 export async function syncStateToCloud(state: KineticState, session: CloudSession): Promise<void> {
   const ownIds = ownProfileIds(state, session)
-  const profile = state.profiles.find((item) => ownIds.has(item.id)) ?? state.profiles[0]
+  const profile = state.profiles.find((item) => item.id === session.user.id) ?? state.profiles.find((item) => ownIds.has(item.id))
   if (profile) {
     await upsert(session, 'profiles', {
       id: session.user.id,
@@ -466,15 +508,16 @@ export async function pullCloudState(local: KineticState, session: CloudSession)
     rest<RecoveryRow[]>(session, 'recovery_entries?select=*&order=entry_date.desc'),
     rest<BodyRow[]>(session, 'body_metrics?select=*&order=metric_date.desc'),
     rest<Vo2Row[]>(session, 'vo2_tests?select=*&order=test_date.desc'),
-    rest<Array<{ requester_id: string; addressee_id: string; status: string }>>(session, 'partner_connections?select=*'),
+    rest<ConnectionRow[]>(session, 'partner_connections?select=*'),
     rest<Array<{ user_id: string; share_workouts: boolean; share_cardio: boolean; share_recovery: boolean; share_body_metrics: boolean }>>(session, 'sharing_preferences?select=*'),
     rest<Array<{ id: string; activity_id: string; author_id: string; body: string; created_at: string }>>(session, 'social_comments?select=*&order=created_at.asc'),
     rest<Array<{ id: string; activity_id: string; author_id: string; emoji: string; created_at: string }>>(session, 'social_reactions?select=*&order=created_at.asc')
   ])
 
   const mappedProfiles = profiles.map((row) => mapProfile(row, session))
-  const partner = mappedProfiles.find((item) => item.id !== session.user.id)
   const connection = connections.find((item) => item.requester_id === session.user.id || item.addressee_id === session.user.id)
+  const partnerProfileId = partnerProfileIdForSession(connections, session.user.id)
+  const partner = mappedProfiles.find((item) => item.id === partnerProfileId)
   const prefs = preferences.find((item) => item.user_id === session.user.id)
   const socialComments: SocialComment[] = comments.map((item) => ({ id: item.id, activityId: item.activity_id, authorProfileId: item.author_id, body: item.body, createdAt: item.created_at }))
   const socialReactions: SocialReaction[] = reactions.map((item) => ({ id: item.id, activityId: item.activity_id, authorProfileId: item.author_id, emoji: item.emoji, createdAt: item.created_at }))

@@ -67,6 +67,8 @@ export function WorkoutLogger({ onClose, initialTitle, initialExerciseIds, initi
       notes: exercise.notes || undefined,
       sets: exercise.sets.map((set): StrengthSet => ({ id: set.id, type: set.type, weightKg: lbToKg(set.weightLb), reps: set.reps || profile.defaultReps, rpe: set.rpe, rir: set.rir, completed: set.completed }))
     }))
+    // This timestamp is read only after the user taps Finish, never during render.
+    // eslint-disable-next-line react-hooks/purity
     const finishedAt = Date.now()
     addWorkout({ id: crypto.randomUUID(), profileId: state.activeProfileId, title, date: new Date(finishedAt).toISOString().slice(0, 10), startedAt: new Date(startedAt).toISOString(), durationMin: Math.max(1, Math.round((finishedAt - startedAt) / 60000)), exercises: exercisesToSave, completed: true })
     onClose()
