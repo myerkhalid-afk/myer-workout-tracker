@@ -1,17 +1,10 @@
 name: Kinetic Build
 
 on:
-  push:
-    branches:
-      - fix/kinetic-release-final
-      - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -68,25 +61,3 @@ jobs:
           const files = walk('dist').sort()
           fs.writeFileSync('dist/release-manifest.json', JSON.stringify({ commit: process.env.GITHUB_SHA, files }, null, 2))
           NODE
-      - name: Publish static release branch
-        if: github.event_name != 'pull_request'
-        run: |
-          rm -rf /tmp/kinetic-dist
-          cp -R dist /tmp/kinetic-dist
-          git config user.name "Kinetic Release Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git checkout --orphan release-static-worktree
-          git rm -rf .
-          git clean -fdx
-          cp -R /tmp/kinetic-dist/. .
-          cat > vercel.json <<'JSON'
-          {
-            "$schema": "https://openapi.vercel.sh/vercel.json",
-            "git": {
-              "deploymentEnabled": false
-            }
-          }
-          JSON
-          git add -A
-          git commit -m "release: Kinetic ${GITHUB_SHA}"
-          git push origin HEAD:release/kinetic-static --force
