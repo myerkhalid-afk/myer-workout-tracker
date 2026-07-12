@@ -8,17 +8,22 @@ import { AppProvider } from '../store/AppContext'
 
 beforeEach(async () => {
   localStorage.clear()
-  localStorage.setItem('kinetic-offline-mode-v1', 'true')
   await db.state.clear()
+  await db.sessions.clear()
   await saveState({ ...structuredClone(initialState), onboarded: true })
   window.history.replaceState({}, '', '/')
 })
+
+async function enterOfflineMode(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: /Continue offline on this device/i }, { timeout: 5000 }))
+  return screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Athlete/i }, { timeout: 5000 })
+}
 
 describe('mobile critical flows', () => {
   it('navigates from Today to Coach while offline', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)
-    expect(await screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Athlete/i }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await enterOfflineMode(user)).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: /Coach/i }))
     expect(await screen.findByRole('heading', { name: 'Coach' }, { timeout: 5000 })).toBeInTheDocument()
     expect(screen.getByText(/Zone 2 cycling/i)).toBeInTheDocument()
@@ -27,7 +32,7 @@ describe('mobile critical flows', () => {
   it('opens the fast strength logger with profile defaults', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)
-    await screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Athlete/i }, { timeout: 5000 })
+    await enterOfflineMode(user)
     await user.click(screen.getByRole('link', { name: /Train/i }))
     await user.click(await screen.findByRole('button', { name: /Start strength/i }, { timeout: 5000 }))
     const dialog = await screen.findByRole('dialog', { name: /Log strength workout/i }, { timeout: 5000 })
@@ -39,7 +44,7 @@ describe('mobile critical flows', () => {
   it('opens screenshot import from Today', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)
-    await screen.findByRole('heading', { name: /Good (morning|afternoon|evening), Athlete/i }, { timeout: 5000 })
+    await enterOfflineMode(user)
     const importButton = screen.getByText('Import').closest('button')
     expect(importButton).not.toBeNull()
     await user.click(importButton!)
