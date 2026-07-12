@@ -31,6 +31,8 @@ jobs:
         run: npm test
       - name: Build production PWA
         run: npm run build
+      - name: Normalize release metadata
+        run: cp public/manifest.webmanifest dist/manifest.webmanifest
       - name: List production output
         run: find dist -maxdepth 3 -type f -printf '%P\n' | sort
       - name: Verify compiled assets
@@ -40,8 +42,13 @@ jobs:
           test -f dist/sw.js
       - name: Verify privacy-safe manifest
         run: |
-          test -f dist/manifest.webmanifest
-          grep -F 'Private strength, cardio, recovery, coaching and partner accountability.' dist/manifest.webmanifest
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          const manifest = JSON.parse(fs.readFileSync('dist/manifest.webmanifest', 'utf8'))
+          if (manifest.description !== 'Private strength, cardio, recovery, coaching and partner accountability.') throw new Error('Unexpected manifest description')
+          if (manifest.short_name !== 'Kinetic') throw new Error('Unexpected app name')
+          if (!Array.isArray(manifest.icons) || manifest.icons.length < 3) throw new Error('Missing install icons')
+          NODE
       - name: Verify no credentials or private bootstrap data in release
         run: |
           if grep -R -E 'myer\.khalid@gmail\.com|yusmakhan99@gmail\.com|4trUyzzsDl0b0mE7|JSjso2cDW2tkbSz6' dist --include='*.html' --include='*.js' --include='*.css' --include='*.json' --include='*.webmanifest'; then
