@@ -52,6 +52,38 @@ function workoutVolume(state: KineticState, days: number) {
 
 export function generateInsights(state: KineticState): CoachInsight[] {
   const insights: CoachInsight[] = []
+  const latestWorkout = [...state.workouts].filter((workout) => workout.profileId === state.activeProfileId && workout.completed).sort((a, b) => b.date.localeCompare(a.date))[0]
+  if (latestWorkout && differenceInCalendarDays(new Date(), parseISO(latestWorkout.date)) <= 3) {
+    const workingSets = latestWorkout.exercises.flatMap((exercise) => exercise.sets).filter((set) => set.completed && set.type !== 'warmup').length
+    const muscleSets = (muscle: string) => latestWorkout.exercises.reduce((total, exercise) => {
+      if (!exerciseById[exercise.exerciseId]?.muscles.includes(muscle as never)) return total
+      return total + exercise.sets.filter((set) => set.completed && set.type !== 'warmup').length
+    }, 0)
+    const quadSets = muscleSets('quads')
+    const hamstringSets = muscleSets('hamstrings')
+    const sessionLoad = latestWorkout.activeCalories ? `${latestWorkout.activeCalories} active kcal · ${latestWorkout.averageHr ?? '—'} avg HR` : `${workingSets} working sets`
+    insights.push({
+      id: 'latest-session-load',
+      tone: latestWorkout.durationMin >= 90 ? 'attention' : 'positive',
+      title: `${workingSets} productive sets across ${latestWorkout.durationMin} minutes`,
+      detail: latestWorkout.durationMin >= 90 ? 'This was a long session, but the controlled average heart rate and your decision to shorten the cooldown suggest the work stayed organized rather than turning into junk volume.' : 'The session packed meaningful work into a recoverable window.',
+      metric: sessionLoad
+    })
+    if (quadSets >= 8) insights.push({
+      id: 'quad-volume',
+      tone: 'attention',
+      title: `${quadSets} quad-focused sets: high, but the sequence makes sense`,
+      detail: 'Squat first, leg press second and leg extension later is a smart priority-to-stability order. Treat this as the week’s main quad stimulus and leave 48–72 hours before hard lower-body work.',
+      metric: `${hamstringSets} hamstring sets`
+    })
+    if (hamstringSets >= 5) insights.push({
+      id: 'posterior-chain',
+      tone: 'positive',
+      title: 'Posterior-chain coverage was complete',
+      detail: 'Romanian deadlifts trained hip extension while seated curls trained knee flexion. That is a better hamstring pairing than relying on squats alone.',
+      metric: `${hamstringSets} direct sets`
+    })
+  }
   const volumes = workoutVolume(state, 28)
   const push = (volumes.chest ?? 0) + (volumes.shoulders ?? 0) + (volumes.triceps ?? 0)
   const pull = (volumes.back ?? 0) + (volumes.biceps ?? 0)
