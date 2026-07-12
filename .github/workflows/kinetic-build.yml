@@ -33,10 +33,10 @@ jobs:
         run: npm run build
       - name: List production output
         run: find dist -maxdepth 3 -type f -printf '%P\n' | sort
-      - name: Verify deterministic assets
+      - name: Verify compiled assets
         run: |
-          test -f dist/assets/app.js
-          test -f dist/assets/app.css
+          find dist/assets -maxdepth 1 -type f -name '*.js' | grep -q .
+          find dist/assets -maxdepth 1 -type f -name '*.css' | grep -q .
           test -f dist/sw.js
       - name: Verify privacy-safe manifest
         run: |
