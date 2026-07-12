@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, BatteryCharging, Bike, CheckCircle2, Dumbbell, Moon, Plus, Sparkles, Target } from 'lucide-react'
+import { Activity, ArrowRight, BatteryCharging, Bike, CheckCircle2, Dumbbell, ImageUp, Moon, Plus, Sparkles, Target } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
@@ -11,10 +11,12 @@ import { MuscleReadinessMap } from '../components/MuscleReadinessMap'
 import { RecoveryCheckin } from '../components/RecoveryCheckin'
 import { WorkoutLogger } from '../components/WorkoutLogger'
 import { CardioLogger } from '../components/CardioLogger'
+import { ScreenshotImport } from '../components/ScreenshotImport'
+import { getLocalGreeting } from '../utils/time'
 
 export function TodayPage() {
   const { state } = useApp()
-  const [modal, setModal] = useState<'recovery' | 'strength' | 'cardio' | null>(null)
+  const [modal, setModal] = useState<'recovery' | 'strength' | 'cardio' | 'import' | null>(null)
   if (!state) return null
   const profile = state.profiles.find((p) => p.id === state.activeProfileId)!
   const latestRecovery = [...state.recovery].filter((r) => r.profileId === state.activeProfileId).sort((a, b) => b.date.localeCompare(a.date))[0]
@@ -32,15 +34,16 @@ export function TodayPage() {
   const recentVolume = recentWorkout?.exercises.reduce((sum, e) => sum + e.sets.filter((set) => set.completed && set.type !== 'warmup').reduce((s, set) => s + set.weightKg * set.reps, 0), 0) ?? 0
 
   return <>
-    <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`Good morning, ${profile.firstName}`} action={<button className="icon-button primary" onClick={() => setModal('recovery')}><Plus size={20} /></button>} />
+    <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`${getLocalGreeting()}, ${profile.firstName}`} action={<button className="icon-button primary" onClick={() => setModal('recovery')}><Plus size={20} /></button>} />
     <Card className="hero-readiness">
       <div className="hero-copy"><Pill tone={recommendation.decision === 'train' ? 'success' : recommendation.decision === 'rest' ? 'warning' : 'accent'}>{recommendation.decision === 'train' ? 'Ready to train' : recommendation.decision === 'rest' ? 'Recovery day' : 'Active recovery'}</Pill><h2>{recommendation.title}</h2><p>{recommendation.subtitle}</p><Link to="/coach" className="text-link">See the reasoning <ArrowRight size={16} /></Link></div>
       <ReadinessRing score={readiness.score} />
     </Card>
 
-    <div className="quick-actions">
+    <div className="quick-actions quick-actions-four">
       <button onClick={() => setModal('strength')}><span className="quick-icon"><Dumbbell size={21} /></span><span><strong>Strength</strong><small>Fast logger</small></span></button>
       <button onClick={() => setModal('cardio')}><span className="quick-icon"><Bike size={21} /></span><span><strong>Cardio</strong><small>Use lab zones</small></span></button>
+      <button onClick={() => setModal('import')}><span className="quick-icon"><ImageUp size={21} /></span><span><strong>Import</strong><small>Read screenshots</small></span></button>
       <button onClick={() => setModal('recovery')}><span className="quick-icon"><BatteryCharging size={21} /></span><span><strong>Check-in</strong><small>Recovery signals</small></span></button>
     </div>
 
@@ -77,5 +80,6 @@ export function TodayPage() {
     {modal === 'recovery' && <RecoveryCheckin onClose={() => setModal(null)} />}
     {modal === 'strength' && <WorkoutLogger onClose={() => setModal(null)} />}
     {modal === 'cardio' && <CardioLogger onClose={() => setModal(null)} />}
+    {modal === 'import' && <ScreenshotImport onClose={() => setModal(null)} />}
   </>
 }
