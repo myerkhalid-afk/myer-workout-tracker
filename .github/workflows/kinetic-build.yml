@@ -1,13 +1,17 @@
 name: Kinetic Build
 
 on:
+  push:
+    branches:
+      - fix/kinetic-release-final
+      - main
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -27,12 +31,29 @@ jobs:
         run: npm test
       - name: Build production PWA
         run: npm run build
+      - name: List production output
+        run: find dist -maxdepth 3 -type f -printf '%P\n' | sort
+      - name: Verify deterministic assets
+        run: |
+          test -f dist/assets/app.js
+          test -f dist/assets/app.css
+          test -f dist/sw.js
+      - name: Verify privacy-safe manifest
+        run: |
+          test -f dist/manifest.webmanifest
+          grep -F 'Private strength, cardio, recovery, coaching and partner accountability.' dist/manifest.webmanifest
+      - name: Verify no credentials or private bootstrap data in release
+        run: |
+          if grep -R -E 'myer\.khalid@gmail\.com|yusmakhan99@gmail\.com|4trUyzzsDl0b0mE7|JSjso2cDW2tkbSz6' dist --include='*.html' --include='*.js' --include='*.css' --include='*.json' --include='*.webmanifest'; then
+            echo 'Private account bootstrap data found in release.' >&2
+            exit 1
+          fi
       - name: Create release manifest
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs'
           import path from 'node:path'
-          const allowed = new Set(['.html', '.js', '.css', '.json', '.svg', '.webmanifest', '.txt'])
+          const allowed = new Set(['.html', '.js', '.css', '.json', '.svg', '.png', '.webmanifest', '.txt'])
           const walk = (dir, prefix = '') => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
             const rel = path.posix.join(prefix, entry.name)
             return entry.isDirectory() ? walk(path.join(dir, entry.name), rel) : allowed.has(path.extname(entry.name)) ? [rel] : []
@@ -40,3 +61,17 @@ jobs:
           const files = walk('dist').sort()
           fs.writeFileSync('dist/release-manifest.json', JSON.stringify({ commit: process.env.GITHUB_SHA, files }, null, 2))
           NODE
+      - name: Publish static release branch
+        if: github.event_name != 'pull_request'
+        run: |
+          rm -rf /tmp/kinetic-dist
+          cp -R dist /tmp/kinetic-dist
+          git config user.name "Kinetic Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan release-static-worktree
+          git rm -rf .
+          git clean -fdx
+          cp -R /tmp/kinetic-dist/. .
+          git add -A
+          git commit -m "release: Kinetic ${GITHUB_SHA}"
+          git push origin HEAD:release/kinetic-static --force
