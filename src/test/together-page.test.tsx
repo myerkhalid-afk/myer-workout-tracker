@@ -15,14 +15,21 @@ beforeEach(async () => {
   state.onboarded = true
   state.profiles = [
     { ...state.profiles[0], id: 'local', name: 'Kinetic Athlete', firstName: 'Athlete', avatarInitials: 'K' },
-    { ...state.profiles[0], id: 'partner-id', name: 'Kinetic Athlete', firstName: 'Athlete', avatarInitials: 'K', isPartner: true }
+    { ...state.profiles[0], id: 'unrelated-profile', name: 'Unrelated Athlete', firstName: 'Yusma', avatarInitials: 'YK', isPartner: false }
   ]
   state.activeProfileId = 'local'
   state.social.partner.status = 'connected'
-  state.social.partner.partnerProfileId = 'partner-id'
+  state.social.partner.partnerProfileId = 'missing-partner-profile'
+  state.workouts = [{
+    ...state.workouts[0],
+    id: 'unrelated-workout',
+    profileId: 'unrelated-profile',
+    title: 'Private decoy workout',
+    visibility: 'partner'
+  }]
   state.vo2Tests = [{
-    id: 'partner-vo2',
-    profileId: 'partner-id',
+    id: 'unrelated-vo2',
+    profileId: 'unrelated-profile',
     date: '2026-07-01',
     vo2Max: 47.2,
     percentile: 92,
@@ -39,7 +46,7 @@ beforeEach(async () => {
 })
 
 describe('Together page identity and privacy', () => {
-  it('uses clear identity labels and does not render partner lab metrics', async () => {
+  it('never substitutes an unrelated local profile for the connected partner', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)
 
@@ -47,7 +54,8 @@ describe('Together page identity and privacy', () => {
     await user.click(await screen.findByRole('link', { name: /Together/i }, { timeout: 5000 }))
 
     expect(await screen.findByRole('heading', { name: 'You + Partner' }, { timeout: 5000 })).toBeInTheDocument()
-    expect(screen.queryByText('Athlete + Athlete')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Yusma/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Private decoy workout/)).not.toBeInTheDocument()
     expect(screen.queryByText(/aerobic engine/i)).not.toBeInTheDocument()
     expect(screen.queryByText('47.2')).not.toBeInTheDocument()
   })
