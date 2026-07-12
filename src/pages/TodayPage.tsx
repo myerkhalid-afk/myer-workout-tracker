@@ -15,9 +15,14 @@ import { ScreenshotImport } from '../components/ScreenshotImport'
 import { getLocalGreeting } from '../utils/time'
 import { getActiveIdentity } from '../utils/identity'
 
+const COACH_WORKOUTS = {
+  'Upper body strength': ['incline-db-press', 'lat-pulldown', 'one-arm-db-row', 'seated-db-shoulder', 'ez-curl', 'rope-pushdown'],
+  'Lower body strength': ['leg-press', 'rdl', 'leg-curl', 'leg-extension', 'calf-raise', 'cable-crunch']
+} as const
+
 export function TodayPage() {
   const { state, session } = useApp()
-  const [modal, setModal] = useState<'add' | 'recovery' | 'strength' | 'cardio' | 'import' | null>(null)
+  const [modal, setModal] = useState<'add' | 'recovery' | 'strength' | 'coach-strength' | 'cardio' | 'import' | null>(null)
   if (!state) return null
   const identity = getActiveIdentity(state, session)
   const latestRecovery = [...state.recovery].filter((r) => r.profileId === state.activeProfileId).sort((a, b) => b.date.localeCompare(a.date))[0]
@@ -33,6 +38,7 @@ export function TodayPage() {
   const totalSets = state.workouts.filter((w) => w.profileId === state.activeProfileId).flatMap((w) => w.exercises).flatMap((e) => e.sets).filter((s) => s.completed && s.type !== 'warmup').length
   const recentWorkout = state.workouts.find((w) => w.profileId === state.activeProfileId)
   const recentVolume = recentWorkout?.exercises.reduce((sum, e) => sum + e.sets.filter((set) => set.completed && set.type !== 'warmup').reduce((s, set) => s + set.weightKg * set.reps, 0), 0) ?? 0
+  const coachExerciseIds = recommendation.title in COACH_WORKOUTS ? [...COACH_WORKOUTS[recommendation.title as keyof typeof COACH_WORKOUTS]] : undefined
 
   return <>
     <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`${getLocalGreeting()}, ${identity.firstName}`} action={<button className="icon-button primary" aria-label="Add to Kinetic" onClick={() => setModal('add')}><Plus size={20} /></button>} />
@@ -63,7 +69,7 @@ export function TodayPage() {
         <div className="plan-list">{recommendation.exercises.slice(0, 4).map((exercise, index) => <div key={exercise.name}><span>{index + 1}</span><div><strong>{exercise.name}</strong><small>{exercise.sets} × {exercise.reps} · {exercise.weight}</small></div><em>{exercise.rest}</em></div>)}</div>
       </> : <div className="plan-header"><div className="plan-icon"><Bike size={22} /></div><div><strong>{recommendation.cardio?.type}</strong><span>{recommendation.cardio?.duration} · {recommendation.cardio?.target}</span></div></div>}
       {recommendation.cardio && <div className="cardio-finisher"><Bike size={18} /><span><strong>{recommendation.cardio.type}</strong><small>{recommendation.cardio.duration} · {recommendation.cardio.target}</small></span></div>}
-      <button className="button button-primary button-full" onClick={() => setModal(recommendation.exercises ? 'strength' : 'cardio')}>Start this session</button>
+      <button className="button button-primary button-full" onClick={() => setModal(recommendation.exercises ? 'coach-strength' : 'cardio')}>Start this session</button>
     </Card>
 
     <div className="mini-stats">
@@ -88,6 +94,7 @@ export function TodayPage() {
     </Sheet>}
     {modal === 'recovery' && <RecoveryCheckin onClose={() => setModal(null)} />}
     {modal === 'strength' && <WorkoutLogger onClose={() => setModal(null)} />}
+    {modal === 'coach-strength' && <WorkoutLogger onClose={() => setModal(null)} initialTitle={recommendation.title} initialExerciseIds={coachExerciseIds} />}
     {modal === 'cardio' && <CardioLogger onClose={() => setModal(null)} />}
     {modal === 'import' && <ScreenshotImport onClose={() => setModal(null)} />}
   </>
