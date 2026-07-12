@@ -4,6 +4,18 @@ export type CardioType = 'cycling' | 'running' | 'treadmill' | 'squash' | 'walki
 export type ActivityVisibility = 'private' | 'connections'
 export type PartnerConnectionStatus = 'not-connected' | 'pending' | 'connected'
 
+export interface CloudUser {
+  id: string
+  email: string
+}
+
+export interface CloudSession {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number
+  user: CloudUser
+}
+
 export interface Profile {
   id: string
   name: string
@@ -27,6 +39,7 @@ export interface ExerciseDefinition {
 
 export interface StrengthSet {
   id: string
+  externalId?: string
   type: SetType
   weightKg: number
   reps: number
@@ -37,6 +50,7 @@ export interface StrengthSet {
 
 export interface StrengthExercise {
   id: string
+  externalId?: string
   exerciseId: string
   notes?: string
   supersetGroup?: string
@@ -45,6 +59,7 @@ export interface StrengthExercise {
 
 export interface StrengthWorkout {
   id: string
+  externalId?: string
   profileId: string
   title: string
   date: string
@@ -64,6 +79,7 @@ export interface StrengthWorkout {
 
 export interface CardioSession {
   id: string
+  externalId?: string
   profileId: string
   type: CardioType
   date: string
@@ -85,6 +101,7 @@ export interface CardioSession {
 
 export interface RecoveryEntry {
   id: string
+  externalId?: string
   profileId: string
   date: string
   sleepHours: number
@@ -101,6 +118,7 @@ export interface RecoveryEntry {
 
 export interface BodyMetric {
   id: string
+  externalId?: string
   profileId: string
   date: string
   weightKg: number
@@ -112,6 +130,24 @@ export interface BodyMetric {
   visceralFat?: number
   bmr?: number
   source?: 'manual' | 'inbody' | 'apple-health'
+}
+
+export interface Vo2Test {
+  id: string
+  externalId?: string
+  profileId: string
+  date: string
+  vo2Max: number
+  percentile?: number
+  aerobicThresholdHr?: number
+  anaerobicThresholdHr?: number
+  peakHr?: number
+  crossoverHr?: number
+  hrr1MinDropPct?: number
+  hrr2MinDropPct?: number
+  zones?: Record<string, unknown>
+  labName?: string
+  notes?: string
 }
 
 export interface SocialComment {
@@ -155,6 +191,7 @@ export interface KineticState {
   cardio: CardioSession[]
   recovery: RecoveryEntry[]
   bodyMetrics: BodyMetric[]
+  vo2Tests: Vo2Test[]
   theme: 'dark' | 'light' | 'system'
   cloudEnabled: boolean
   social: SocialState
