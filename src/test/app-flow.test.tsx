@@ -7,30 +7,32 @@ import { db, saveState } from '../services/db'
 import { AppProvider } from '../store/AppContext'
 
 beforeEach(async () => {
+  localStorage.clear()
+  localStorage.setItem('kinetic-offline-mode-v1', 'true')
   await db.state.clear()
   await saveState({ ...structuredClone(initialState), onboarded: true })
   window.history.replaceState({}, '', '/')
 })
 
 describe('mobile critical flows', () => {
-  it('navigates from Today to Coach', async () => {
+  it('navigates from Today to Coach while offline', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)
-    expect(await screen.findByRole('heading', { name: /Good morning, Myer/i }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Good morning, Athlete/i }, { timeout: 5000 })).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: /Coach/i }))
     expect(await screen.findByRole('heading', { name: 'Coach' }, { timeout: 5000 })).toBeInTheDocument()
     expect(screen.getByText(/Zone 2 cycling/i)).toBeInTheDocument()
   })
 
-  it('opens the fast strength logger with 12-rep defaults', async () => {
+  it('opens the fast strength logger with profile defaults', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)
-    await screen.findByRole('heading', { name: /Good morning, Myer/i }, { timeout: 5000 })
+    await screen.findByRole('heading', { name: /Good morning, Athlete/i }, { timeout: 5000 })
     await user.click(screen.getByRole('link', { name: /Train/i }))
     await user.click(await screen.findByRole('button', { name: /Start strength/i }, { timeout: 5000 }))
     const dialog = await screen.findByRole('dialog', { name: /Log strength workout/i }, { timeout: 5000 })
     expect(within(dialog).getByDisplayValue('Lower Body Strength')).toBeInTheDocument()
-    const repInputs = within(dialog).getAllByDisplayValue('12')
+    const repInputs = within(dialog).getAllByDisplayValue('10')
     expect(repInputs.length).toBeGreaterThanOrEqual(3)
   })
 })
