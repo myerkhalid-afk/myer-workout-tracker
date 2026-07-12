@@ -1,4 +1,5 @@
 import type { KineticState } from '../types'
+import { defaultSocialState } from '../data/seed'
 
 export function downloadBackup(state: KineticState) {
   const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Kinetic', state }, null, 2)], { type: 'application/json' })
@@ -14,5 +15,14 @@ export async function parseBackup(file: File): Promise<KineticState> {
   const parsed = JSON.parse(await file.text())
   const state = parsed.state ?? parsed
   if (!state?.profiles || !state?.workouts || !state?.bodyMetrics) throw new Error('This is not a valid Kinetic backup.')
-  return state as KineticState
+  return {
+    ...state,
+    version: 3,
+    onboarded: true,
+    cardio: state.cardio ?? [],
+    recovery: state.recovery ?? [],
+    vo2Tests: state.vo2Tests ?? [],
+    cloudEnabled: true,
+    social: state.social ?? structuredClone(defaultSocialState)
+  } as KineticState
 }
