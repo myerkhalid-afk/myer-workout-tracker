@@ -25,7 +25,7 @@ beforeEach(async () => {
     id: 'unrelated-workout',
     profileId: 'unrelated-profile',
     title: 'Private decoy workout',
-    visibility: 'partner'
+    visibility: 'connections'
   }]
   state.vo2Tests = [{
     id: 'unrelated-vo2',
