@@ -10,12 +10,11 @@ describe('Kinetic deterministic coach', () => {
     expect(result.factors.map((factor) => factor.label)).toEqual(['Sleep', 'Body', 'Mind', 'Signals'])
   })
 
-  it('recommends lower body after recent upper-body work', () => {
+  it('recommends recovery after the current lower-body session', () => {
     const recommendation = recommendToday(initialState)
-    expect(recommendation.decision).toBe('train')
-    expect(recommendation.title).toMatch(/Lower body/i)
-    expect(recommendation.exercises?.[0].name).toBe('Leg Press')
-    expect(recommendation.cardio?.target).toMatch(/130–150 bpm/)
+    expect(recommendation.decision).toBe('recover')
+    expect(recommendation.title).toMatch(/Zone 2 cycling/i)
+    expect(recommendation.cardio?.target).toMatch(/143–153 bpm/)
   })
 
   it('surfaces weight, training balance and zone insights', () => {
