@@ -41,14 +41,26 @@ describe('mobile critical flows', () => {
     expect(repInputs.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('opens screenshot import from Today', async () => {
+  it('opens screenshot upload from Today', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)
     await enterOfflineMode(user)
-    const importButton = screen.getByText('Import').closest('button')
-    expect(importButton).not.toBeNull()
-    await user.click(importButton!)
+    const uploadButton = screen.getByText('Upload').closest('button')
+    expect(uploadButton).not.toBeNull()
+    await user.click(uploadButton!)
     expect(await screen.findByRole('dialog', { name: /Import workout screenshots/i })).toBeInTheDocument()
     expect(screen.getByText(/Turn screenshots into a workout/i)).toBeInTheDocument()
+  })
+
+  it('opens every add action from the plus button', async () => {
+    const user = userEvent.setup()
+    render(<AppProvider><App /></AppProvider>)
+    await enterOfflineMode(user)
+    await user.click(screen.getByRole('button', { name: /Add to Kinetic/i }))
+    const dialog = await screen.findByRole('dialog', { name: /Add to Kinetic/i })
+    expect(within(dialog).getByRole('button', { name: /Strength workout/i })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /Cardio session/i })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /Upload screenshots/i })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /Recovery check-in/i })).toBeInTheDocument()
   })
 })
