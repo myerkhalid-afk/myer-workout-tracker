@@ -7,25 +7,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/favicon.svg'],
-      manifest: {
-        name: 'Kinetic — Train with intent',
-        short_name: 'Kinetic',
-        description: 'Private strength, cardio, recovery, coaching and partner accountability.',
-        theme_color: '#0a0c10',
-        background_color: '#0a0c10',
-        display: 'standalone',
-        orientation: 'portrait-primary',
-        start_url: '/',
-        scope: '/',
-        categories: ['fitness', 'health', 'lifestyle'],
-        icons: [
-          { src: '/icons/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }
-        ]
-      },
+      manifest: false,
       workbox: {
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,svg,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
         runtimeCaching: []
       },
       devOptions: { enabled: true }
