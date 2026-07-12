@@ -5,6 +5,7 @@ import App from './App'
 import { AppProvider } from './store/AppContext'
 import './styles.css'
 import './kinetic-v11.css'
+import './screenshot-import.css'
 
 registerSW({ immediate: true })
 
