@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/kinetic-cloud-sync
+      - fix/kinetic-deterministic-pwa
       - main
   pull_request:
     branches:
@@ -31,12 +32,20 @@ jobs:
         run: npm test
       - name: Build production PWA
         run: npm run build
+      - name: Verify deterministic private release
+        run: |
+          test -f dist/assets/app.js
+          test -f dist/assets/app.css
+          test -f dist/manifest.webmanifest
+          test -f dist/sw.js
+          grep -F 'Private strength, cardio, recovery, coaching and partner accountability.' dist/manifest.webmanifest
+          ! grep -R -E 'Myer|Yusma|myer\.khalid|yusmakhan' dist --include='*.html' --include='*.js' --include='*.css' --include='*.json' --include='*.webmanifest'
       - name: Create release manifest
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs'
           import path from 'node:path'
-          const allowed = new Set(['.html', '.js', '.css', '.json', '.svg', '.webmanifest', '.txt'])
+          const allowed = new Set(['.html', '.js', '.css', '.json', '.svg', '.png', '.webmanifest', '.txt'])
           const walk = (dir, prefix = '') => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
             const rel = path.posix.join(prefix, entry.name)
             return entry.isDirectory() ? walk(path.join(dir, entry.name), rel) : allowed.has(path.extname(entry.name)) ? [rel] : []
@@ -47,11 +56,13 @@ jobs:
       - name: Publish static release branch
         if: github.event_name != 'pull_request'
         run: |
+          rm -rf /tmp/kinetic-dist
           cp -R dist /tmp/kinetic-dist
           git config user.name "Kinetic Release Bot"
           git config user.email "actions@users.noreply.github.com"
           git checkout --orphan release-static-worktree
           git rm -rf .
+          git clean -fdx
           cp -R /tmp/kinetic-dist/. .
           git add -A
           git commit -m "release: Kinetic ${GITHUB_SHA}"
