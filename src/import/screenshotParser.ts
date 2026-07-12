@@ -147,14 +147,16 @@ function parseExercises(text: string): ScreenshotExerciseDraft[] {
 }
 
 function parseCardio(text: string): ScreenshotCardioDraft | undefined {
-  if (!/INCLINE WALK|TREADMILL|CYCLING|RUNNING|SQUASH/.test(text)) return undefined
-  const type: CardioType = /INCLINE WALK|TREADMILL/.test(text) ? 'treadmill' : /CYCL/.test(text) ? 'cycling' : /RUN/.test(text) ? 'running' : /SQUASH/.test(text) ? 'squash' : 'other'
-  const clock = text.match(/(?:INCLINE WALK|TREADMILL|CYCLING|RUNNING|SQUASH)[\s\S]{0,90}\b(\d{1,2}):(\d{2})\b/)
+  const anchor = text.search(/INCLINE WALK|TREADMILL|CYCLING|RUNNING|SQUASH/)
+  if (anchor < 0) return undefined
+  const cardioText = text.slice(anchor, anchor + 360)
+  const type: CardioType = /INCLINE WALK|TREADMILL/.test(cardioText) ? 'treadmill' : /CYCL/.test(cardioText) ? 'cycling' : /RUN/.test(cardioText) ? 'running' : /SQUASH/.test(cardioText) ? 'squash' : 'other'
+  const clock = cardioText.match(/(?:INCLINE WALK|TREADMILL|CYCLING|RUNNING|SQUASH)[\s\S]{0,90}\b(\d{1,2}):(\d{2})\b/)
   const durationMin = clock ? Number(clock[1]) + Number(clock[2]) / 60 : 0
-  const distanceMeters = firstNumber(text, [/\b(\d{2,5})\s*M\b/])
-  const distanceKm = firstNumber(text, [/\b(\d+(?:[.,]\d+)?)\s*KM\b/]) ?? (distanceMeters ? distanceMeters / 1000 : undefined)
-  const averageHr = firstNumber(text, [/AVG\s*HR[^0-9]{0,20}(\d{2,3})/])
-  const activeCalories = firstNumber(text, [/ACTIVE\s*CAL[^0-9]{0,20}(\d{1,4})/])
+  const distanceMeters = firstNumber(cardioText, [/\b(\d{2,5})\s*M\b/])
+  const distanceKm = firstNumber(cardioText, [/\b(\d+(?:[.,]\d+)?)\s*KM\b/]) ?? (distanceMeters ? distanceMeters / 1000 : undefined)
+  const averageHr = firstNumber(cardioText, [/AVG\s*HR[^0-9]{0,20}(\d{2,3})/])
+  const activeCalories = firstNumber(cardioText, [/ACTIVE\s*CAL[^0-9]{0,20}(\d{1,4})/])
   if (!durationMin && !distanceKm && !averageHr && !activeCalories) return undefined
   return { type, durationMin, distanceKm, averageHr, activeCalories, indoor: type === 'treadmill', notes: 'Imported from workout screenshot.' }
 }
