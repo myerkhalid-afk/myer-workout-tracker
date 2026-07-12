@@ -1,9 +1,17 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { loadState, resetState as resetDbState, saveState } from '../services/db'
+import {
+  clearCachedCloudSession,
+  loadCachedCloudSession,
+  loadState,
+  resetState as resetDbState,
+  saveCachedCloudSession,
+  saveState
+} from '../services/db'
 import {
   claimBootstrap,
   loadCloudSession,
+  refreshCloudSession,
   registerAccount,
   signIn,
   signOutCloud,
@@ -11,7 +19,7 @@ import {
 } from '../services/cloud'
 import type { BodyMetric, CardioSession, CloudSession, KineticState, RecoveryEntry, StrengthWorkout } from '../types'
 
-const OFFLINE_KEY = 'kinetic-offline-mode-v1'
+const LEGACY_OFFLINE_KEY = 'kinetic-offline-mode-v1'
 
 interface AppContextValue {
   state: KineticState | null
@@ -43,7 +51,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [authReady, setAuthReady] = useState(false)
   const [session, setSession] = useState<CloudSession | null>(null)
-  const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem(OFFLINE_KEY) === 'true')
+  const [offlineMode, setOfflineMode] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [cloudError, setCloudError] = useState('')
   const stateRef = useRef<KineticState | null>(null)
@@ -54,6 +62,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     stateRef.current = next
     setState(next)
     void saveState(next)
+  }
+
+  const rememberSession = async (cloudSession: CloudSession) => {
+    sessionRef.current = cloudSession
+    setSession(cloudSession)
+    await saveCachedCloudSession(cloudSession)
   }
 
   const performSync = async (source?: KineticState, activeSession?: CloudSession) => {
@@ -90,21 +104,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     const boot = async () => {
       let local: KineticState | null = null
+      localStorage.removeItem(LEGACY_OFFLINE_KEY)
       try {
         local = await loadState()
         if (cancelled) return
         stateRef.current = local
         setState(local)
         setReady(true)
-        const cloudSession = await loadCloudSession()
+
+        let cloudSession: CloudSession | null = null
+        try {
+          cloudSession = await loadCloudSession()
+        } catch {
+          await signOutCloud(null)
+        }
+
+        if (!cloudSession) {
+          const cached = await loadCachedCloudSession()
+          if (cached) {
+            try {
+              cloudSession = await refreshCloudSession(cached)
+            } catch {
+              await clearCachedCloudSession()
+              await signOutCloud(null)
+            }
+          }
+        }
+
         if (cancelled) return
-        sessionRef.current = cloudSession
-        setSession(cloudSession)
         if (cloudSession) {
-          localStorage.removeItem(OFFLINE_KEY)
+          await rememberSession(cloudSession)
           setOfflineMode(false)
           await claimBootstrap(cloudSession)
           await performSync(local, cloudSession)
+        } else {
+          setOfflineMode(false)
         }
       } catch (error) {
         if (!cancelled) setCloudError(error instanceof Error ? error.message : 'Kinetic could not finish cloud setup. Offline data is still available.')
@@ -122,6 +156,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!session) return
+    let active = true
+
+    const refreshIfNeeded = async (force = false) => {
+      const current = sessionRef.current
+      if (!current || (!force && current.expiresAt - Date.now() > 5 * 60_000)) return
+      try {
+        const refreshed = await refreshCloudSession(current)
+        if (!active) return
+        await rememberSession(refreshed)
+        setCloudError('')
+      } catch {
+        if (active) setCloudError('Kinetic could not refresh cloud access. Your local data remains available and it will retry when the app is reopened.')
+      }
+    }
+
+    const delay = Math.max(30_000, session.expiresAt - Date.now() - 2 * 60_000)
+    const refreshTimer = window.setTimeout(() => void refreshIfNeeded(true), delay)
+    const onFocus = () => void refreshIfNeeded()
+    const onVisibility = () => { if (document.visibilityState === 'visible') void refreshIfNeeded() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      active = false
+      window.clearTimeout(refreshTimer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [session?.expiresAt])
+
   const update = (updater: (current: KineticState) => KineticState) => {
     const current = stateRef.current
     if (!current) return
@@ -131,9 +197,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   const finishAuthentication = async (cloudSession: CloudSession) => {
-    sessionRef.current = cloudSession
-    setSession(cloudSession)
-    localStorage.removeItem(OFFLINE_KEY)
+    await rememberSession(cloudSession)
+    localStorage.removeItem(LEGACY_OFFLINE_KEY)
     setOfflineMode(false)
     await claimBootstrap(cloudSession)
     const local = stateRef.current ?? await loadState()
@@ -160,16 +225,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     signInAccount: async (email, password) => finishAuthentication(await signIn(email, password)),
     signOut: async () => {
       await signOutCloud(sessionRef.current)
+      await clearCachedCloudSession()
       sessionRef.current = null
       setSession(null)
-      localStorage.removeItem(OFFLINE_KEY)
       setOfflineMode(false)
       setCloudError('')
     },
-    continueOffline: () => {
-      localStorage.setItem(OFFLINE_KEY, 'true')
-      setOfflineMode(true)
-    },
+    continueOffline: () => setOfflineMode(true),
     syncNow: async () => performSync()
   }), [state, ready, authReady, session, offlineMode, syncing, cloudError])
 
