@@ -13,12 +13,13 @@ import { WorkoutLogger } from '../components/WorkoutLogger'
 import { CardioLogger } from '../components/CardioLogger'
 import { ScreenshotImport } from '../components/ScreenshotImport'
 import { getLocalGreeting } from '../utils/time'
+import { getActiveIdentity } from '../utils/identity'
 
 export function TodayPage() {
-  const { state } = useApp()
+  const { state, session } = useApp()
   const [modal, setModal] = useState<'recovery' | 'strength' | 'cardio' | 'import' | null>(null)
   if (!state) return null
-  const profile = state.profiles.find((p) => p.id === state.activeProfileId)!
+  const identity = getActiveIdentity(state, session)
   const latestRecovery = [...state.recovery].filter((r) => r.profileId === state.activeProfileId).sort((a, b) => b.date.localeCompare(a.date))[0]
   const readiness = readinessScore(latestRecovery)
   const recommendation = recommendToday(state)
@@ -34,7 +35,7 @@ export function TodayPage() {
   const recentVolume = recentWorkout?.exercises.reduce((sum, e) => sum + e.sets.filter((set) => set.completed && set.type !== 'warmup').reduce((s, set) => s + set.weightKg * set.reps, 0), 0) ?? 0
 
   return <>
-    <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`${getLocalGreeting()}, ${profile.firstName}`} action={<button className="icon-button primary" onClick={() => setModal('recovery')}><Plus size={20} /></button>} />
+    <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`${getLocalGreeting()}, ${identity.firstName}`} action={<button className="icon-button primary" onClick={() => setModal('recovery')}><Plus size={20} /></button>} />
     <Card className="hero-readiness">
       <div className="hero-copy"><Pill tone={recommendation.decision === 'train' ? 'success' : recommendation.decision === 'rest' ? 'warning' : 'accent'}>{recommendation.decision === 'train' ? 'Ready to train' : recommendation.decision === 'rest' ? 'Recovery day' : 'Active recovery'}</Pill><h2>{recommendation.title}</h2><p>{recommendation.subtitle}</p><Link to="/coach" className="text-link">See the reasoning <ArrowRight size={16} /></Link></div>
       <ReadinessRing score={readiness.score} />
