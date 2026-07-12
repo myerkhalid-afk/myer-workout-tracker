@@ -4,6 +4,7 @@ import { useApp } from '../store/AppContext'
 import { cloudStatus } from '../services/cloud'
 import { downloadBackup, parseBackup } from '../services/backup'
 import { Card, PageHeader, Pill, Sheet } from '../components/Primitives'
+import { getActiveIdentity } from '../utils/identity'
 
 function BodyMetricSheet({ onClose }: { onClose: () => void }) {
   const { state, addBodyMetric } = useApp()
@@ -23,7 +24,8 @@ export function ProfilePage() {
   const [notice, setNotice] = useState('')
   const [bodySheet, setBodySheet] = useState(false)
   if (!state) return null
-  const profile = state.profiles.find((item) => item.id === state.activeProfileId) ?? state.profiles[0]
+  const identity = getActiveIdentity(state, session)
+  const profile = identity.profile
   const vo2 = state.vo2Tests.find((test) => test.profileId === state.activeProfileId)
   const setTheme = (theme: 'dark' | 'light' | 'system') => update((current) => ({ ...current, theme }))
   const importBackup = async (file?: File) => {
@@ -36,7 +38,7 @@ export function ProfilePage() {
 
   return <>
     <PageHeader eyebrow="Settings & data" title="Profile" />
-    <Card className="profile-card"><div className="avatar xlarge">{profile?.avatarInitials ?? 'K'}</div><div><h2>{profile?.name ?? 'Kinetic Athlete'}</h2><p>{profile?.goal}</p><span>{profile?.heightCm ? `${profile.heightCm} cm · ` : ''}{profile?.weightKg ? `${profile.weightKg} kg · ` : ''}default {profile?.defaultReps ?? 10} reps</span>{session && <small className="profile-email">{session.user.email}</small>}</div><button className="icon-button"><ChevronRight size={19} /></button></Card>
+    <Card className="profile-card"><div className="avatar xlarge">{identity.initials}</div><div><h2>{identity.fullName}</h2><p>{profile?.goal}</p><span>{profile?.heightCm ? `${profile.heightCm} cm · ` : ''}{profile?.weightKg ? `${profile.weightKg} kg · ` : ''}default {profile?.defaultReps ?? 10} reps</span>{session && <small className="profile-email">{session.user.email}</small>}</div><button className="icon-button"><ChevronRight size={19} /></button></Card>
 
     {vo2 && <Card className="profile-vo2-card"><HeartPulse size={22} /><div><strong>VO₂ max {vo2.vo2Max}</strong><p>{vo2.percentile ? `${vo2.percentile}th percentile · ` : ''}{vo2.labName ?? 'Lab tested'} · {vo2.date}</p></div><Pill tone="success">Lab profile</Pill></Card>}
 
