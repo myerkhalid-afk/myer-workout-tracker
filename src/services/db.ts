@@ -1,14 +1,17 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { KineticState } from '../types'
+import type { CloudSession, KineticState } from '../types'
 import { defaultSocialState, initialState } from '../data/seed'
 
 interface StateRecord { id: 'kinetic'; data: KineticState; updatedAt: string }
+interface SessionRecord { id: 'cloud'; data: CloudSession; updatedAt: string }
 
 class KineticDatabase extends Dexie {
   state!: EntityTable<StateRecord, 'id'>
+  sessions!: EntityTable<SessionRecord, 'id'>
   constructor() {
     super('kinetic-local-v1')
     this.version(1).stores({ state: 'id, updatedAt' })
+    this.version(2).stores({ state: 'id, updatedAt', sessions: 'id, updatedAt' })
   }
 }
 
@@ -37,6 +40,19 @@ export async function loadState(): Promise<KineticState> {
 
 export async function saveState(data: KineticState): Promise<void> {
   await db.state.put({ id: 'kinetic', data, updatedAt: new Date().toISOString() })
+}
+
+export async function loadCachedCloudSession(): Promise<CloudSession | null> {
+  const record = await db.sessions.get('cloud')
+  return record?.data ?? null
+}
+
+export async function saveCachedCloudSession(data: CloudSession): Promise<void> {
+  await db.sessions.put({ id: 'cloud', data, updatedAt: new Date().toISOString() })
+}
+
+export async function clearCachedCloudSession(): Promise<void> {
+  await db.sessions.delete('cloud')
 }
 
 export async function resetState(): Promise<KineticState> {
