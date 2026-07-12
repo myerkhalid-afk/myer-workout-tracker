@@ -50,6 +50,26 @@ describe('parseScreenshotText', () => {
     expect(result.cardio?.activeCalories).toBe(79)
   })
 
+  it('keeps exercise order across continuation screenshots', () => {
+    const pageOne = `WORKOUT LOG\nLEG EXTENSION 135 LB 155 LB 175 LB`
+    const pageTwo = `BARBELL SQUAT 175 LB 180 LB 200 LB 340 LB\nCABLE CRUNCH 67.5 LB 77.5 LB 82.5 LB`
+    const result = parseScreenshotText([pageOne, pageTwo], new Date(2026, 6, 12, 22, 0))
+    expect(result.exercises.map((exercise) => exercise.exerciseId)).toEqual(['leg-extension', 'squat', 'cable-crunch'])
+  })
+
+  it('pairs Apple Fitness column labels with the correct values', () => {
+    const columnLayout = `
+WORKOUT DETAILS
+WORKOUT TIME 1:38:48
+ACTIVE CALORIES   TOTAL CALORIES   AVG. HEART RATE
+719 CAL            898 CAL          125 BPM
+`
+    const result = parseScreenshotText([columnLayout], new Date(2026, 6, 12, 22, 0))
+    expect(result.activeCalories).toBe(719)
+    expect(result.totalCalories).toBe(898)
+    expect(result.averageHr).toBe(125)
+  })
+
   it('falls back to a reviewable draft when text is sparse', () => {
     const result = parseScreenshotText(['Functional Strength Training'], new Date(2026, 6, 12, 22, 0))
     expect(result.title).toBe('Functional Strength Training')
