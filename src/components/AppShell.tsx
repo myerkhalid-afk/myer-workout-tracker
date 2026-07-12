@@ -2,6 +2,7 @@ import { Activity, BarChart3, Dumbbell, HeartHandshake, House, Sparkles, UserRou
 import { NavLink, Outlet } from 'react-router-dom'
 import clsx from 'clsx'
 import { useApp } from '../store/AppContext'
+import { getActiveIdentity } from '../utils/identity'
 
 const tabs = [
   { to: '/', label: 'Today', icon: House },
@@ -13,13 +14,13 @@ const tabs = [
 ]
 
 export function AppShell() {
-  const { state } = useApp()
-  const profile = state?.profiles.find((p) => p.id === state.activeProfileId)
+  const { state, session } = useApp()
+  const identity = state ? getActiveIdentity(state, session) : null
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup"><span className="brand-mark"><Activity size={18} /></span><span>Kinetic</span></div>
-        <div className="avatar" aria-label={profile?.name}>{profile?.avatarInitials ?? 'MK'}</div>
+        <div className="avatar" aria-label={identity?.fullName}>{identity?.initials ?? 'K'}</div>
       </header>
       <main className="page-wrap"><Outlet /></main>
       <nav className="bottom-nav" aria-label="Primary navigation">
