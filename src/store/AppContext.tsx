@@ -135,10 +135,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (cloudSession) {
           await rememberSession(cloudSession)
           setOfflineMode(false)
-          await claimBootstrap(cloudSession)
-          await performSync(local, cloudSession)
+          setAuthReady(true)
+
+          // The cached local app is ready at this point. Bootstrap and full cloud
+          // reconciliation are deliberately background work so startup never waits
+          // on several network round trips.
+          void (async () => {
+            try {
+              await claimBootstrap(cloudSession)
+              if (!cancelled) await performSync(local, cloudSession)
+            } catch (error) {
+              if (!cancelled) setCloudError(error instanceof Error ? error.message : 'Kinetic could not finish cloud sync. Your local data remains available.')
+            }
+          })()
         } else {
           setOfflineMode(false)
+          setAuthReady(true)
         }
       } catch (error) {
         if (!cancelled) setCloudError(error instanceof Error ? error.message : 'Kinetic could not finish cloud setup. Offline data is still available.')
