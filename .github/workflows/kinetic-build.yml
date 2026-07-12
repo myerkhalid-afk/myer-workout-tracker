@@ -1,6 +1,9 @@
 name: Kinetic Build
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -61,3 +64,9 @@ jobs:
           const files = walk('dist').sort()
           fs.writeFileSync('dist/release-manifest.json', JSON.stringify({ commit: process.env.GITHUB_SHA, files }, null, 2))
           NODE
+      - name: Upload verified release
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinetic-dist
+          path: dist
+          if-no-files-found: error
