@@ -1,0 +1,210 @@
+name: Account-scoped sync fix
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply account ownership patch when needed
+        id: patch
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          cloud_path = Path('src/services/cloud.ts')
+          source = cloud_path.read_text()
+          marker = 'export function ownProfileIds'
+
+          if marker in source:
+              print('Patch already present; this run will verify and remove the one-time workflow.')
+              with open(Path(__import__('os').environ['GITHUB_OUTPUT']), 'a') as output:
+                  output.write('already_patched=true\n')
+              raise SystemExit(0)
+
+          old_ownership = """function ownProfileIds(state: KineticState, session: CloudSession) {
+            return new Set([state.activeProfileId, session.user.id, 'myer', 'local'])
+          }
+          """
+          new_ownership = """interface ConnectionRow {
+            requester_id: string
+            addressee_id: string
+            status: string
+          }
+
+          function identityToken(value?: string) {
+            return (value ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+          }
+
+          function emailIdentityTokens(email: string) {
+            const localPart = email.trim().toLowerCase().split('@')[0] ?? ''
+            const compact = identityToken(localPart).replace(/\\d+$/g, '')
+            const parts = localPart.split(/[^a-z0-9]+/).map((part) => identityToken(part).replace(/\\d+$/g, '')).filter(Boolean)
+            return [...new Set([compact, ...parts].filter(Boolean))]
+          }
+
+          function profileMatchesSession(profile: Profile, session: CloudSession) {
+            if (profile.id === session.user.id) return true
+            if (profile.email?.trim().toLowerCase() === session.user.email.trim().toLowerCase()) return true
+            const candidates = [profile.id, profile.firstName, profile.name.split(/\\s+/)[0]]
+              .map(identityToken)
+              .filter((candidate) => candidate.length >= 3 && !['local', 'athlete', 'kinetic'].includes(candidate))
+            const emailTokens = emailIdentityTokens(session.user.email)
+            return candidates.some((candidate) => emailTokens.some((emailToken) => emailToken === candidate || (candidate.length >= 4 && emailToken.length >= 5 && emailToken.startsWith(candidate))))
+          }
+
+          export function ownProfileIds(state: KineticState, session: CloudSession) {
+            const owned = new Set<string>([session.user.id])
+            const matchingProfiles = state.profiles.filter((profile) => profileMatchesSession(profile, session))
+            matchingProfiles.forEach((profile) => owned.add(profile.id))
+
+            if (matchingProfiles.length === 0 && !state.profiles.some((profile) => profile.id === session.user.id)) {
+              const genericLocal = state.profiles.find((profile) => profile.id === 'local' && (identityToken(profile.firstName) === 'athlete' || identityToken(profile.name) === 'kineticathlete'))
+              if (genericLocal) owned.add(genericLocal.id)
+            }
+
+            return owned
+          }
+
+          export function partnerProfileIdForSession(connections: ConnectionRow[], userId: string) {
+            const connection = connections.find((item) => item.requester_id === userId || item.addressee_id === userId)
+            if (!connection || connection.status !== 'accepted') return ''
+            return connection.requester_id === userId ? connection.addressee_id : connection.requester_id
+          }
+          """
+          if old_ownership not in source:
+              raise SystemExit('Expected ownership block not found')
+          source = source.replace(old_ownership, new_ownership)
+
+          old_profile = "  const profile = state.profiles.find((item) => ownIds.has(item.id)) ?? state.profiles[0]"
+          new_profile = "  const profile = state.profiles.find((item) => item.id === session.user.id) ?? state.profiles.find((item) => ownIds.has(item.id))"
+          if old_profile not in source:
+              raise SystemExit('Expected profile selection not found')
+          source = source.replace(old_profile, new_profile)
+
+          old_connection_query = "rest<Array<{ requester_id: string; addressee_id: string; status: string }>>(session, 'partner_connections?select=*'),"
+          new_connection_query = "rest<ConnectionRow[]>(session, 'partner_connections?select=*'),"
+          if old_connection_query not in source:
+              raise SystemExit('Expected connection query not found')
+          source = source.replace(old_connection_query, new_connection_query)
+
+          old_partner = """  const mappedProfiles = profiles.map((row) => mapProfile(row, session))
+            const partner = mappedProfiles.find((item) => item.id !== session.user.id)
+            const connection = connections.find((item) => item.requester_id === session.user.id || item.addressee_id === session.user.id)
+          """
+          new_partner = """  const mappedProfiles = profiles.map((row) => mapProfile(row, session))
+            const connection = connections.find((item) => item.requester_id === session.user.id || item.addressee_id === session.user.id)
+            const partnerProfileId = partnerProfileIdForSession(connections, session.user.id)
+            const partner = mappedProfiles.find((item) => item.id === partnerProfileId)
+          """
+          if old_partner not in source:
+              raise SystemExit('Expected partner selection not found')
+          source = source.replace(old_partner, new_partner)
+          cloud_path.write_text(source)
+
+          Path('src/test/cloud-identity.test.ts').write_text("""import { describe, expect, it } from 'vitest'
+          import { initialState } from '../data/seed'
+          import { ownProfileIds, partnerProfileIdForSession } from '../services/cloud'
+          import type { CloudSession, Profile } from '../types'
+
+          const baseProfile = initialState.profiles[0]
+          const profile = (id: string, firstName: string, name: string): Profile => ({ ...baseProfile, id, firstName, name, avatarInitials: firstName.slice(0, 2).toUpperCase() })
+          const session = (id: string, email: string): CloudSession => ({ accessToken: 'test', refreshToken: 'test', expiresAt: Date.now() + 60_000, user: { id, email } })
+
+          describe('cloud identity ownership', () => {
+            it('does not treat the active partner profile as owned by the signed-in account', () => {
+              const state = structuredClone(initialState)
+              state.activeProfileId = 'yusma-legacy'
+              state.profiles = [
+                profile('myer', 'Myer', 'Myer Khalid'),
+                profile('yusma-legacy', 'Yusma', 'Yusma Khan')
+              ]
+
+              const myerIds = ownProfileIds(state, session('myer-cloud-id', 'myer.khalid@gmail.com'))
+              expect(myerIds.has('myer-cloud-id')).toBe(true)
+              expect(myerIds.has('myer')).toBe(true)
+              expect(myerIds.has('yusma-legacy')).toBe(false)
+
+              const yusmaIds = ownProfileIds(state, session('yusma-cloud-id', 'yusmakhan99@gmail.com'))
+              expect(yusmaIds.has('yusma-cloud-id')).toBe(true)
+              expect(yusmaIds.has('yusma-legacy')).toBe(true)
+              expect(yusmaIds.has('myer')).toBe(false)
+            })
+
+            it('allows a generic local profile only for first-account migration', () => {
+              const state = structuredClone(initialState)
+              const ids = ownProfileIds(state, session('new-cloud-id', 'new.user@example.com'))
+              expect(ids.has('new-cloud-id')).toBe(true)
+              expect(ids.has('local')).toBe(true)
+            })
+
+            it('resolves only the accepted connection counterpart as partner', () => {
+              const connections = [
+                { requester_id: 'decoy', addressee_id: 'someone-else', status: 'accepted' },
+                { requester_id: 'myer-cloud-id', addressee_id: 'yusma-cloud-id', status: 'accepted' }
+              ]
+              expect(partnerProfileIdForSession(connections, 'myer-cloud-id')).toBe('yusma-cloud-id')
+              expect(partnerProfileIdForSession([{ requester_id: 'myer-cloud-id', addressee_id: 'yusma-cloud-id', status: 'pending' }], 'myer-cloud-id')).toBe('')
+            })
+          })
+          """)
+
+          with open(Path(__import__('os').environ['GITHUB_OUTPUT']), 'a') as output:
+              output.write('already_patched=false\n')
+          PY
+      - name: Install dependencies
+        run: |
+          sed -i 's#https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/#https://registry.npmjs.org/#g' package-lock.json
+          npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Run tests
+        run: npm test
+      - name: Build production PWA
+        run: npm run build
+      - name: Normalize release metadata
+        run: cp public/manifest.webmanifest dist/manifest.webmanifest
+      - name: Verify compiled assets and privacy
+        run: |
+          find dist/assets -maxdepth 1 -type f -name '*.js' | grep -q .
+          find dist/assets -maxdepth 1 -type f -name '*.css' | grep -q .
+          test -f dist/sw.js
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          const manifest = JSON.parse(fs.readFileSync('dist/manifest.webmanifest', 'utf8'))
+          if (manifest.description !== 'Private strength, cardio, recovery, coaching and partner accountability.') throw new Error('Unexpected manifest description')
+          if (manifest.short_name !== 'Kinetic') throw new Error('Unexpected app name')
+          if (!Array.isArray(manifest.icons) || manifest.icons.length < 3) throw new Error('Missing install icons')
+          NODE
+          if grep -R -E 'myer\.khalid@gmail\.com|yusmakhan99@gmail\.com|4trUyzzsDl0b0mE7|JSjso2cDW2tkbSz6' dist --include='*.html' --include='*.js' --include='*.css' --include='*.json' --include='*.webmanifest'; then
+            echo 'Private account bootstrap data found in release.' >&2
+            exit 1
+          fi
+      - name: Commit patch or remove one-time workflow
+        run: |
+          git config user.name "Kinetic Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          if [ "${{ steps.patch.outputs.already_patched }}" = "true" ]; then
+            rm .github/workflows/account-scoped-sync-fix.yml
+            git add -A
+            git commit -m "ci: remove one-time account sync workflow"
+          else
+            git add src/services/cloud.ts src/test/cloud-identity.test.ts
+            git commit -m "fix: scope cloud sync to signed-in identity"
+          fi
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
