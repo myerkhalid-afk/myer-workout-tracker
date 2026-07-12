@@ -6,6 +6,7 @@ export interface ScreenshotExerciseDraft {
   weightsLb: string
   reps: string
   warmupSets: number
+  reviewId?: string
 }
 
 export interface ScreenshotCardioDraft {
@@ -33,7 +34,7 @@ export interface ScreenshotWorkoutDraft {
 }
 
 const exerciseSpecs = [
-  { exerciseId: 'squat', name: 'Barbell Squat', aliases: ['BARBELL BACK SQUAT', 'BACK SQUAT'] },
+  { exerciseId: 'squat', name: 'Barbell Squat', aliases: ['BARBELL BACK SQUAT', 'BARBELL SQUAT', 'BACK SQUAT'] },
   { exerciseId: 'leg-press', name: 'Leg Press', aliases: ['LEG PRESS'] },
   { exerciseId: 'rdl', name: 'Romanian Deadlift', aliases: ['ROMANIAN DEADLIFT', 'RDL'] },
   { exerciseId: 'leg-curl', name: 'Seated Leg Curl', aliases: ['SEATED HAMSTRING CURL', 'HAMSTRING CURL', 'SEATED LEG CURL'] },
@@ -63,9 +64,11 @@ const monthNumbers: Record<string, number> = {
 function normalize(text: string) {
   return text
     .toUpperCase()
-    .replace(/\r/g, '\n')
+    .replace(/\r\n?/g, '\n')
     .replace(/[|]/g, 'I')
     .replace(/[–—]/g, '-')
+    .replace(/\bB\s*P\s*M\b/g, 'BPM')
+    .replace(/\bK\s*C\s*A\s*L\b/g, 'KCAL')
     .replace(/\s+LB\.?/g, ' LB')
 }
 
@@ -99,51 +102,164 @@ function parseDuration(text: string) {
 }
 
 function getLikelyAppleFitnessText(texts: string[]) {
-  return texts.find((text) => /WORKOUT DETAILS|ACTIVE CALORIES|TOTAL CALORIES/.test(text)) ?? ''
+  return texts.filter((text) => /WORKOUT DETAILS|ACTIVE CALORIES|TOTAL CALORIES/.test(text)).join('\n')
 }
 
 function getLikelyWorkoutLogText(texts: string[]) {
-  return texts.find((text) => /WORKOUT LOG|SETS\s+REPS\s+WEIGHT|TODAY.?S HIGHLIGHTS/.test(text)) ?? texts.join('\n')
+  const workoutTexts = texts.filter((text) =>
+    /WORKOUT LOG|SETS\s+REPS\s+WEIGHT|TODAY.?S HIGHLIGHTS/.test(text) ||
+    exerciseSpecs.some((spec) => spec.aliases.some((alias) => text.includes(alias)))
+  )
+  return (workoutTexts.length ? workoutTexts : texts).join('\n')
 }
 
 function extractWeightsLb(segment: string) {
   const unitMatches = [...segment.matchAll(/\b(\d{1,3}(?:[.,]\d+)?)\s*(?:LB|LBS)\b/g)]
     .map((match) => Number(match[1].replace(',', '.')))
     .filter((value) => value >= 5 && value <= 1200)
-  if (unitMatches.length) return unitMatches.slice(0, 5)
+  if (unitMatches.length) return unitMatches.slice(0, 8)
 
-  const fallback = [...segment.slice(0, 220).matchAll(/\b(\d{2,3}(?:[.,]\d+)?)\b/g)]
+  const fallback = [...segment.slice(0, 260).matchAll(/\b(\d{2,3}(?:[.,]\d+)?)\b/g)]
     .map((match) => Number(match[1].replace(',', '.')))
     .filter((value) => value >= 20 && value <= 500 && value !== 60 && value !== 75 && value !== 90 && value !== 120)
-  return fallback.slice(0, 4)
+  return fallback.slice(0, 6)
+}
+
+type ExerciseOccurrence = typeof exerciseSpecs[number] & { position: number; aliasLength: number }
+
+function findExerciseOccurrences(text: string) {
+  const occurrences: ExerciseOccurrence[] = []
+  exerciseSpecs.forEach((spec) => {
+    spec.aliases.slice().sort((a, b) => b.length - a.length).forEach((alias) => {
+      let offset = 0
+      while (offset < text.length) {
+        const position = text.indexOf(alias, offset)
+        if (position < 0) break
+        const overlaps = occurrences.some((item) => item.exerciseId === spec.exerciseId && Math.abs(item.position - position) < Math.max(item.aliasLength, alias.length))
+        if (!overlaps) occurrences.push({ ...spec, position, aliasLength: alias.length })
+        offset = position + alias.length
+      }
+    })
+  })
+  return occurrences.sort((a, b) => a.position - b.position)
 }
 
 function parseExercises(text: string): ScreenshotExerciseDraft[] {
-  const found = exerciseSpecs
-    .map((spec) => {
-      const positions = spec.aliases.map((alias) => text.indexOf(alias)).filter((position) => position >= 0)
-      return { ...spec, position: positions.length ? Math.min(...positions) : -1 }
-    })
-    .filter((item) => item.position >= 0)
-    .sort((a, b) => a.position - b.position)
-
-  return found.flatMap((item, index) => {
-    const nextPosition = found[index + 1]?.position ?? Math.min(text.length, item.position + 500)
-    const segment = text.slice(item.position, Math.min(nextPosition, item.position + 500))
+  const occurrences = findExerciseOccurrences(text)
+  const candidates = occurrences.flatMap((item, index) => {
+    const nextPosition = occurrences[index + 1]?.position ?? Math.min(text.length, item.position + 650)
+    const segment = text.slice(item.position, Math.min(nextPosition, item.position + 650))
     const skipped = item.exerciseId === 'plank' && /SKIPPED|\b0\b/.test(segment.slice(0, 180))
     if (skipped) return []
     const weights = extractWeightsLb(segment)
-    if (!weights.length && item.exerciseId === 'plank') return []
+    if (!weights.length) return []
     const warmupSets = item.exerciseId === 'squat' && weights.length >= 4 && weights[0] <= 65 ? 1 : 0
     const reps = weights.map((_, setIndex) => warmupSets && setIndex === 0 ? 10 : 12)
     return [{
-      exerciseId: item.exerciseId,
-      name: item.name,
-      weightsLb: weights.join(', '),
-      reps: reps.join(', '),
-      warmupSets
+      position: item.position,
+      exercise: {
+        exerciseId: item.exerciseId,
+        name: item.name,
+        weightsLb: weights.join(', '),
+        reps: reps.join(', '),
+        warmupSets
+      }
     }]
   })
+
+  const firstUsableByExercise = new Map<string, typeof candidates[number]>()
+  candidates.forEach((candidate) => {
+    if (!firstUsableByExercise.has(candidate.exercise.exerciseId)) firstUsableByExercise.set(candidate.exercise.exerciseId, candidate)
+  })
+  return [...firstUsableByExercise.values()].sort((a, b) => a.position - b.position).map((candidate) => candidate.exercise)
+}
+
+type MetricKey = 'activeCalories' | 'totalCalories' | 'averageHr' | 'maxHr'
+type MetricKind = 'calories' | 'heartRate'
+
+type MetricLabel = { key: MetricKey; kind: MetricKind; start: number; end: number }
+
+const metricDefinitions: { key: MetricKey; kind: MetricKind; pattern: RegExp }[] = [
+  { key: 'activeCalories', kind: 'calories', pattern: /ACTIVE\s*CAL(?:ORIES)?/g },
+  { key: 'totalCalories', kind: 'calories', pattern: /TOTAL\s*CAL(?:ORIES)?/g },
+  { key: 'averageHr', kind: 'heartRate', pattern: /(?:AVG\.?|AVERAGE)\s*(?:HEART\s*RATE|HR)/g },
+  { key: 'maxHr', kind: 'heartRate', pattern: /(?:MAX|PEAK)\s*(?:HEART\s*RATE|HR)/g }
+]
+
+function labelsInLine(line: string) {
+  const labels: MetricLabel[] = []
+  metricDefinitions.forEach((definition) => {
+    const pattern = new RegExp(definition.pattern.source, 'g')
+    for (const match of line.matchAll(pattern)) labels.push({ key: definition.key, kind: definition.kind, start: match.index ?? 0, end: (match.index ?? 0) + match[0].length })
+  })
+  return labels.sort((a, b) => a.start - b.start)
+}
+
+function metricValues(text: string, kind: MetricKind, allowPlain = false) {
+  const withUnit = kind === 'heartRate'
+    ? [...text.matchAll(/\b(\d{2,3})\s*BPM\b/g)].map((match) => Number(match[1]))
+    : [...text.matchAll(/\b(\d{2,5})\s*(?:KCAL|CAL)\b/g)].map((match) => Number(match[1]))
+  const valid = withUnit.filter((value) => kind === 'heartRate' ? value >= 40 && value <= 240 : value >= 20 && value <= 5000)
+  if (valid.length || !allowPlain) return valid
+  return [...text.matchAll(/\b(\d{2,5})\b/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => kind === 'heartRate' ? value >= 40 && value <= 240 : value >= 20 && value <= 5000)
+}
+
+function parseSummaryMetrics(text: string) {
+  const result: Partial<Record<MetricKey, number>> = {}
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+
+  lines.forEach((line, lineIndex) => {
+    const labels = labelsInLine(line)
+    if (!labels.length) return
+
+    labels.forEach((label, labelIndex) => {
+      if (result[label.key] !== undefined) return
+      const nextLabelStart = labels[labelIndex + 1]?.start ?? line.length
+      const localValues = metricValues(line.slice(label.end, nextLabelStart), label.kind, true)
+      if (localValues.length) result[label.key] = localValues[0]
+    })
+
+    ;(['calories', 'heartRate'] as MetricKind[]).forEach((kind) => {
+      const unresolved = labels.filter((label) => label.kind === kind && result[label.key] === undefined)
+      if (!unresolved.length) return
+      const following = lines.slice(lineIndex + 1, lineIndex + 3).join(' ')
+      const values = metricValues(following, kind, unresolved.length === 1)
+      unresolved.forEach((label, index) => {
+        if (values[index] !== undefined) result[label.key] = values[index]
+      })
+    })
+  })
+
+  result.activeCalories ??= firstNumber(text, [
+    /ACTIVE\s*CAL(?:ORIES)?[^0-9]{0,40}(\d{2,5})\s*(?:KCAL|CAL)?/
+  ])
+  result.totalCalories ??= firstNumber(text, [
+    /TOTAL\s*CAL(?:ORIES)?[^0-9]{0,40}(\d{2,5})\s*(?:KCAL|CAL)?/
+  ])
+  result.averageHr ??= firstNumber(text, [
+    /(?:AVG\.?|AVERAGE)\s*(?:HEART\s*RATE|HR)[^0-9]{0,40}(\d{2,3})\s*BPM?/
+  ])
+  result.maxHr ??= firstNumber(text, [
+    /(?:MAX|PEAK)\s*(?:HEART\s*RATE|HR)[^0-9]{0,30}(\d{2,3})\s*BPM?/
+  ])
+
+  if (result.activeCalories && result.totalCalories && result.totalCalories < result.activeCalories) {
+    const active = result.activeCalories
+    result.activeCalories = result.totalCalories
+    result.totalCalories = active
+  }
+  return result
+}
+
+function parseHeartRateRange(text: string) {
+  for (const line of text.split('\n')) {
+    if (!/HEART\s*RATE/.test(line) || /AVG\.?|AVERAGE|ACTIVE|TOTAL/.test(line)) continue
+    const values = [...line.matchAll(/\b(\d{2,3})\b/g)].map((match) => Number(match[1])).filter((value) => value >= 40 && value <= 240)
+    if (values.length >= 2) return Math.max(...values)
+  }
+  return undefined
 }
 
 function parseCardio(text: string): ScreenshotCardioDraft | undefined {
@@ -175,12 +291,11 @@ export function parseScreenshotText(rawTexts: string[], now = new Date()): Scree
         : 'Imported Workout'
   const date = parseDate(combined, now)
   const durationMin = parseDuration(appleText || workoutText)
-  const activeCalories = firstNumber(appleText, [/ACTIVE\s*CALORIES?[^0-9]{0,30}(\d{2,5})/, /ACTIVE\s*CAL[^0-9]{0,20}(\d{2,5})/])
-  const totalCalories = firstNumber(appleText, [/TOTAL\s*CALORIES?[^0-9]{0,30}(\d{2,5})/])
-  const averageHr = firstNumber(appleText || combined, [/AVG\.?\s*(?:HEART\s*RATE|HR)[^0-9]{0,30}(\d{2,3})/, /(\d{2,3})\s*BPM\s*AVG/])
-  const maxHrExplicit = firstNumber(combined, [/MAX\s*HR[^0-9]{0,20}(\d{2,3})/, /PEAK\s*HR[^0-9]{0,20}(\d{2,3})/])
-  const appleCandidates = [...appleText.matchAll(/\b(1[3-9]\d|2[0-2]\d)\b/g)].map((match) => Number(match[1])).filter((value) => value !== averageHr)
-  const maxHr = maxHrExplicit ?? (appleCandidates.length ? Math.max(...appleCandidates) : undefined)
+  const summaryMetrics = parseSummaryMetrics(appleText || combined)
+  const averageHr = summaryMetrics.averageHr
+  const activeCalories = summaryMetrics.activeCalories
+  const totalCalories = summaryMetrics.totalCalories
+  const maxHr = summaryMetrics.maxHr ?? parseHeartRateRange(appleText)
   const effort = firstNumber(workoutText, [/EFFORT[^0-9]{0,20}([1-9]|10)\b/])
   const exercises = parseExercises(workoutText)
   const cardio = parseCardio(workoutText)
@@ -188,6 +303,7 @@ export function parseScreenshotText(rawTexts: string[], now = new Date()): Scree
   if (!durationMin) warnings.push('Workout duration was not detected.')
   if (!exercises.length) warnings.push('No exercise table was detected; add exercises before saving.')
   if (!averageHr && /HEART RATE|AVG HR/.test(combined)) warnings.push('Heart-rate text was found, but the average could not be read confidently.')
+  if (!totalCalories && /TOTAL\s*CAL/.test(combined)) warnings.push('Total calories were visible, but the value could not be read confidently.')
 
   return {
     title,
