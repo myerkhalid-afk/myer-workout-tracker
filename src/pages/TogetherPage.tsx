@@ -76,9 +76,9 @@ export function TogetherPage() {
   const myName = identity.firstName.toLowerCase() === 'athlete' ? 'You' : identity.firstName
   const myInitials = myName === 'You' && identity.initials === 'K' ? 'ME' : identity.initials
   const connected = state.social.partner.status === 'connected'
-  const partnerCandidate = state.profiles.find((profile) => profile.id === state.social.partner.partnerProfileId)
-    ?? state.profiles.find((profile) => profile.id !== state.activeProfileId)
-  const partner = connected ? partnerCandidate : undefined
+  const partner = connected && state.social.partner.partnerProfileId
+    ? state.profiles.find((profile) => profile.id === state.social.partner.partnerProfileId)
+    : undefined
   const partnerName = partnerDisplayName(partner, state.social.partner.partnerEmail)
   const partnerInitials = partner && !isGenericName(partner.firstName) && partner.avatarInitials.trim()
     ? partner.avatarInitials
