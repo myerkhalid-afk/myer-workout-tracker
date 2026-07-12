@@ -5,7 +5,7 @@ import { format, parseISO } from 'date-fns'
 import { generateInsights, readinessScore, recommendToday } from '../coach/rules'
 import { calculateMuscleReadiness, summarizeMuscleReadiness } from '../coach/muscleReadiness'
 import { useApp } from '../store/AppContext'
-import { Card, PageHeader, Pill } from '../components/Primitives'
+import { Card, PageHeader, Pill, Sheet } from '../components/Primitives'
 import { ReadinessRing } from '../components/ReadinessRing'
 import { MuscleReadinessMap } from '../components/MuscleReadinessMap'
 import { RecoveryCheckin } from '../components/RecoveryCheckin'
@@ -17,7 +17,7 @@ import { getActiveIdentity } from '../utils/identity'
 
 export function TodayPage() {
   const { state, session } = useApp()
-  const [modal, setModal] = useState<'recovery' | 'strength' | 'cardio' | 'import' | null>(null)
+  const [modal, setModal] = useState<'add' | 'recovery' | 'strength' | 'cardio' | 'import' | null>(null)
   if (!state) return null
   const identity = getActiveIdentity(state, session)
   const latestRecovery = [...state.recovery].filter((r) => r.profileId === state.activeProfileId).sort((a, b) => b.date.localeCompare(a.date))[0]
@@ -35,7 +35,7 @@ export function TodayPage() {
   const recentVolume = recentWorkout?.exercises.reduce((sum, e) => sum + e.sets.filter((set) => set.completed && set.type !== 'warmup').reduce((s, set) => s + set.weightKg * set.reps, 0), 0) ?? 0
 
   return <>
-    <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`${getLocalGreeting()}, ${identity.firstName}`} action={<button className="icon-button primary" onClick={() => setModal('recovery')}><Plus size={20} /></button>} />
+    <PageHeader eyebrow={format(new Date(), 'EEEE, MMMM d')} title={`${getLocalGreeting()}, ${identity.firstName}`} action={<button className="icon-button primary" aria-label="Add to Kinetic" onClick={() => setModal('add')}><Plus size={20} /></button>} />
     <Card className="hero-readiness">
       <div className="hero-copy"><Pill tone={recommendation.decision === 'train' ? 'success' : recommendation.decision === 'rest' ? 'warning' : 'accent'}>{recommendation.decision === 'train' ? 'Ready to train' : recommendation.decision === 'rest' ? 'Recovery day' : 'Active recovery'}</Pill><h2>{recommendation.title}</h2><p>{recommendation.subtitle}</p><Link to="/coach" className="text-link">See the reasoning <ArrowRight size={16} /></Link></div>
       <ReadinessRing score={readiness.score} />
@@ -44,7 +44,7 @@ export function TodayPage() {
     <div className="quick-actions quick-actions-four">
       <button onClick={() => setModal('strength')}><span className="quick-icon"><Dumbbell size={21} /></span><span><strong>Strength</strong><small>Fast logger</small></span></button>
       <button onClick={() => setModal('cardio')}><span className="quick-icon"><Bike size={21} /></span><span><strong>Cardio</strong><small>Use lab zones</small></span></button>
-      <button onClick={() => setModal('import')}><span className="quick-icon"><ImageUp size={21} /></span><span><strong>Import</strong><small>Read screenshots</small></span></button>
+      <button onClick={() => setModal('import')}><span className="quick-icon"><ImageUp size={21} /></span><span><strong>Upload</strong><small>Workout screenshots</small></span></button>
       <button onClick={() => setModal('recovery')}><span className="quick-icon"><BatteryCharging size={21} /></span><span><strong>Check-in</strong><small>Recovery signals</small></span></button>
     </div>
 
@@ -78,6 +78,14 @@ export function TodayPage() {
     <div className="section-title"><div><span className="eyebrow">Fitness timeline</span><h2>Recent activity</h2></div><Link to="/progress">All activity</Link></div>
     <Card className="timeline-card">{timeline.map(({ date, type, title, detail, icon: Icon }) => <div className="timeline-row" key={`${date}-${title}`}><span className="timeline-icon"><Icon size={18} /></span><div><strong>{title}</strong><small>{detail}</small></div><time><span>{type}</span>{format(parseISO(date), 'MMM d')}</time></div>)}</Card>
 
+    {modal === 'add' && <Sheet title="Add to Kinetic" onClose={() => setModal(null)}>
+      <div className="quick-actions quick-actions-four add-sheet-actions">
+        <button onClick={() => setModal('strength')}><span className="quick-icon"><Dumbbell size={21} /></span><span><strong>Strength workout</strong><small>Log sets, reps and weight</small></span></button>
+        <button onClick={() => setModal('cardio')}><span className="quick-icon"><Bike size={21} /></span><span><strong>Cardio session</strong><small>Log duration, distance and heart rate</small></span></button>
+        <button onClick={() => setModal('import')}><span className="quick-icon"><ImageUp size={21} /></span><span><strong>Upload screenshots</strong><small>Import workout or fitness screenshots</small></span></button>
+        <button onClick={() => setModal('recovery')}><span className="quick-icon"><BatteryCharging size={21} /></span><span><strong>Recovery check-in</strong><small>Add sleep, soreness and energy</small></span></button>
+      </div>
+    </Sheet>}
     {modal === 'recovery' && <RecoveryCheckin onClose={() => setModal(null)} />}
     {modal === 'strength' && <WorkoutLogger onClose={() => setModal(null)} />}
     {modal === 'cardio' && <CardioLogger onClose={() => setModal(null)} />}
