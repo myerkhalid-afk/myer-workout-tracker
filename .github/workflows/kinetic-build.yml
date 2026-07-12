@@ -79,6 +79,14 @@ jobs:
           git rm -rf .
           git clean -fdx
           cp -R /tmp/kinetic-dist/. .
+          cat > vercel.json <<'JSON'
+          {
+            "$schema": "https://openapi.vercel.sh/vercel.json",
+            "git": {
+              "deploymentEnabled": false
+            }
+          }
+          JSON
           git add -A
           git commit -m "release: Kinetic ${GITHUB_SHA}"
           git push origin HEAD:release/kinetic-static --force
