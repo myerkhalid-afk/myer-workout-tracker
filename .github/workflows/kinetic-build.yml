@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -70,3 +70,20 @@ jobs:
           name: kinetic-dist
           path: dist
           if-no-files-found: error
+      - name: Publish verified static release
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_dir="$(mktemp -d)"
+          cp -a dist/. "$release_dir/"
+          printf '%s\n' "$GITHUB_SHA" > "$release_dir/release-id.txt"
+          cd "$release_dir"
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan release
+          git add -A
+          git commit -m "Publish Kinetic Together privacy release"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin HEAD:release/kinetic-static
