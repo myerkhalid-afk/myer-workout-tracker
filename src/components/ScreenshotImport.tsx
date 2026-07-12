@@ -1,5 +1,5 @@
-import { AlertTriangle, CheckCircle2, FileImage, ImagePlus, LoaderCircle, Plus, ScanText, ShieldCheck, Trash2, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, CheckCircle2, FileImage, GripVertical, ImagePlus, LoaderCircle, Plus, ScanText, ShieldCheck, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { exercises } from '../data/exercises'
 import { parseScreenshotText, type ScreenshotExerciseDraft, type ScreenshotWorkoutDraft } from '../import/screenshotParser'
 import { useApp } from '../store/AppContext'
@@ -36,6 +36,13 @@ function emptyDraft(): ScreenshotWorkoutDraft {
   }
 }
 
+function prepareDraft(draft: ScreenshotWorkoutDraft): ScreenshotWorkoutDraft {
+  return {
+    ...draft,
+    exercises: draft.exercises.map((exercise) => ({ ...exercise, reviewId: exercise.reviewId ?? crypto.randomUUID() }))
+  }
+}
+
 function numberList(value: string) {
   return value.split(/[,/\s]+/).map((item) => Number(item)).filter((item) => Number.isFinite(item) && item >= 0)
 }
@@ -61,9 +68,11 @@ function buildExercise(draft: ScreenshotExerciseDraft): StrengthExercise | null 
 export function ScreenshotImport({ onClose }: { onClose: () => void }) {
   const { state, update } = useApp()
   const inputRef = useRef<HTMLInputElement>(null)
+  const dragIndexRef = useRef<number | null>(null)
   const [stage, setStage] = useState<Stage>('pick')
   const [files, setFiles] = useState<File[]>([])
   const [draft, setDraft] = useState<ScreenshotWorkoutDraft | null>(null)
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('Preparing reader…')
   const [error, setError] = useState('')
@@ -103,10 +112,10 @@ export function ScreenshotImport({ onClose }: { onClose: () => void }) {
         texts.push(result.data.text)
         setProgress(Math.round(((index + 1) / files.length) * 100))
       }
-      setDraft(parseScreenshotText(texts))
+      setDraft(prepareDraft(parseScreenshotText(texts)))
       setStage('review')
     } catch (reason) {
-      setDraft(emptyDraft())
+      setDraft(prepareDraft(emptyDraft()))
       setError(reason instanceof Error ? `Automatic reading failed: ${reason.message}` : 'Automatic reading failed. The screenshots are still accepted for manual review.')
       setStage('review')
     } finally {
@@ -116,8 +125,50 @@ export function ScreenshotImport({ onClose }: { onClose: () => void }) {
 
   const patchDraft = (patch: Partial<ScreenshotWorkoutDraft>) => setDraft((current) => current ? { ...current, ...patch } : current)
   const patchExercise = (index: number, patch: Partial<ScreenshotExerciseDraft>) => setDraft((current) => current ? { ...current, exercises: current.exercises.map((exercise, exerciseIndex) => exerciseIndex === index ? { ...exercise, ...patch } : exercise) } : current)
+  const moveExercise = (from: number, to: number) => setDraft((current) => {
+    if (!current || from === to || from < 0 || to < 0 || from >= current.exercises.length || to >= current.exercises.length) return current
+    const reordered = [...current.exercises]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    return { ...current, exercises: reordered }
+  })
   const removeExercise = (index: number) => setDraft((current) => current ? { ...current, exercises: current.exercises.filter((_, exerciseIndex) => exerciseIndex !== index) } : current)
-  const addExercise = () => setDraft((current) => current ? { ...current, exercises: [...current.exercises, { exerciseId: exercises[0].id, name: exercises[0].name, weightsLb: '', reps: '10', warmupSets: 0 }] } : current)
+  const addExercise = () => setDraft((current) => current ? { ...current, exercises: [...current.exercises, { exerciseId: exercises[0].id, name: exercises[0].name, weightsLb: '', reps: '10', warmupSets: 0, reviewId: crypto.randomUUID() }] } : current)
+
+  const beginReorder = (index: number, event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    dragIndexRef.current = index
+    setDraggingIndex(index)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const continueReorder = (event: PointerEvent<HTMLButtonElement>) => {
+    const from = dragIndexRef.current
+    if (from === null) return
+    event.preventDefault()
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-import-index]')
+    const to = Number(target?.dataset.importIndex)
+    if (!Number.isInteger(to) || to === from) return
+    moveExercise(from, to)
+    dragIndexRef.current = to
+    setDraggingIndex(to)
+  }
+
+  const endReorder = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    dragIndexRef.current = null
+    setDraggingIndex(null)
+  }
+
+  const reorderWithKeyboard = (index: number, event: KeyboardEvent<HTMLButtonElement>) => {
+    const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
+    if (!delta || !draft) return
+    event.preventDefault()
+    const target = Math.max(0, Math.min(draft.exercises.length - 1, index + delta))
+    if (target === index) return
+    moveExercise(index, target)
+    window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-import-index="${target}"] .import-drag-handle`)?.focus())
+  }
 
   const save = () => {
     if (!draft) return
@@ -199,9 +250,10 @@ export function ScreenshotImport({ onClose }: { onClose: () => void }) {
         <label><span>Total calories</span><div className="input-with-unit"><input type="number" value={draft.totalCalories ?? ''} onChange={(event) => patchDraft({ totalCalories: Number(event.target.value) || undefined })} /><em>kcal</em></div></label>
       </div>
 
-      <div className="section-label"><span>Exercises detected</span><small>Weights are shown in pounds for easy checking</small></div>
-      <div className="import-exercises">{draft.exercises.map((exercise, index) => <div key={`${exercise.exerciseId}-${index}`}>
-        <button className="remove-import-row" onClick={() => removeExercise(index)} aria-label={`Remove ${exercise.name}`}><Trash2 size={15} /></button>
+      <div className="section-label"><span>Exercises detected</span><small>Hold the grip to drag · arrow keys also work</small></div>
+      <div className="import-exercises">{draft.exercises.map((exercise, index) => <div key={exercise.reviewId ?? `${exercise.exerciseId}-${index}`} data-import-index={index} className={draggingIndex === index ? 'is-dragging' : undefined}>
+        <button type="button" className="import-drag-handle" aria-label={`Reorder ${exercise.name}. Position ${index + 1} of ${draft.exercises.length}`} title="Hold and drag to reorder" onPointerDown={(event) => beginReorder(index, event)} onPointerMove={continueReorder} onPointerUp={endReorder} onPointerCancel={endReorder} onKeyDown={(event) => reorderWithKeyboard(index, event)}><GripVertical size={18} /><span>{index + 1}</span></button>
+        <button type="button" className="remove-import-row" onClick={() => removeExercise(index)} aria-label={`Remove ${exercise.name}`}><Trash2 size={15} /></button>
         <label><span>Exercise</span><select value={exercise.exerciseId} onChange={(event) => { const selected = exercises.find((item) => item.id === event.target.value)!; patchExercise(index, { exerciseId: selected.id, name: selected.name }) }}>{exercises.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label><span>Weights, lb</span><input placeholder="135, 155, 175" value={exercise.weightsLb} onChange={(event) => patchExercise(index, { weightsLb: event.target.value })} /></label>
         <label><span>Reps</span><input placeholder="12, 12, 12" value={exercise.reps} onChange={(event) => patchExercise(index, { reps: event.target.value })} /></label>
