@@ -19,7 +19,7 @@ describe('mobile critical flows', () => {
     expect(await screen.findByRole('heading', { name: /Good morning, Myer/i }, { timeout: 5000 })).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: /Coach/i }))
     expect(await screen.findByRole('heading', { name: 'Coach' }, { timeout: 5000 })).toBeInTheDocument()
-    expect(screen.getByText(/Lower body strength/i)).toBeInTheDocument()
+    expect(screen.getByText(/Zone 2 cycling/i)).toBeInTheDocument()
   })
 
   it('opens the fast strength logger with 12-rep defaults', async () => {
