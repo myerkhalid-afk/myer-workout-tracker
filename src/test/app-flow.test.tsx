@@ -41,6 +41,26 @@ describe('mobile critical flows', () => {
     expect(repInputs.length).toBeGreaterThanOrEqual(3)
   })
 
+  it('starts the coach prescription with its exact set and rep targets', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    await saveState({
+      ...structuredClone(initialState),
+      onboarded: true,
+      recovery: [{ id: 'ready', profileId: 'local', date: today, sleepHours: 8, sleepQuality: 5, soreness: 1, stress: 1, energy: 5, mood: 5 }]
+    })
+    const user = userEvent.setup()
+    render(<AppProvider><App /></AppProvider>)
+    await enterOfflineMode(user)
+    await user.click(screen.getByRole('button', { name: /Start this session/i }))
+    const dialog = await screen.findByRole('dialog', { name: /Log strength workout/i }, { timeout: 5000 })
+    expect(within(dialog).getByDisplayValue('Lower body strength')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Leg Press').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('Romanian Deadlift').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByDisplayValue('8')).toHaveLength(6)
+    expect(within(dialog).getAllByDisplayValue('10')).toHaveLength(3)
+    expect(within(dialog).getAllByDisplayValue('12')).toHaveLength(6)
+  })
+
   it('opens screenshot upload from Today', async () => {
     const user = userEvent.setup()
     render(<AppProvider><App /></AppProvider>)

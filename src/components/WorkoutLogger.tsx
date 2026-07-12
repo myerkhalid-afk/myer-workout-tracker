@@ -11,7 +11,8 @@ const kgToLb = (kg: number) => Math.round((kg / 0.453592) * 2) / 2
 
 interface DraftSet { id: string; type: SetType; weightLb: number; reps: number; rpe?: number; rir?: number; completed: boolean }
 interface DraftExercise { id: string; exerciseId: string; sets: DraftSet[]; notes: string; expanded: boolean }
-interface WorkoutLoggerProps { onClose: () => void; initialTitle?: string; initialExerciseIds?: string[] }
+export interface InitialExercisePrescription { exerciseId: string; sets: number; reps: number }
+interface WorkoutLoggerProps { onClose: () => void; initialTitle?: string; initialExerciseIds?: string[]; initialExercises?: InitialExercisePrescription[] }
 
 function previousSets(exerciseId: string, workouts: StrengthWorkout[]) {
   for (const workout of workouts) {
@@ -25,16 +26,19 @@ function newSet(weightLb = 0, reps = 12): DraftSet {
   return { id: crypto.randomUUID(), type: 'working', weightLb, reps, completed: false }
 }
 
-export function WorkoutLogger({ onClose, initialTitle, initialExerciseIds }: WorkoutLoggerProps) {
+export function WorkoutLogger({ onClose, initialTitle, initialExerciseIds, initialExercises }: WorkoutLoggerProps) {
   const { state, addWorkout } = useApp()
   const profile = state?.profiles.find((p) => p.id === state.activeProfileId)
   const recentWorkouts = useMemo(() => [...(state?.workouts ?? [])].filter((w) => w.profileId === state?.activeProfileId).sort((a, b) => b.date.localeCompare(a.date)), [state])
-  const defaultExerciseIds = initialExerciseIds?.length ? initialExerciseIds : ['leg-press', 'rdl', 'leg-curl']
-  const defaultExercises = defaultExerciseIds.map((exerciseId) => {
+  const prescriptions = initialExercises?.length ? initialExercises : (initialExerciseIds?.length ? initialExerciseIds.map((exerciseId) => ({ exerciseId, sets: 3, reps: profile?.defaultReps ?? 12 })) : ['leg-press', 'rdl', 'leg-curl'].map((exerciseId) => ({ exerciseId, sets: 3, reps: profile?.defaultReps ?? 12 })))
+  const defaultExercises = prescriptions.map(({ exerciseId, sets: setCount, reps }) => {
     const previous = previousSets(exerciseId, recentWorkouts)
     return {
       id: crypto.randomUUID(), exerciseId, notes: '', expanded: true,
-      sets: previous.length ? previous.slice(0, 3).map((s: StrengthSet) => ({ id: crypto.randomUUID(), type: s.type, weightLb: kgToLb(s.weightKg), reps: s.reps, rpe: s.rpe, rir: s.rir, completed: false })) : [newSet(0, profile?.defaultReps ?? 12), newSet(0, profile?.defaultReps ?? 12), newSet(0, profile?.defaultReps ?? 12)]
+      sets: Array.from({ length: setCount }, (_, index) => {
+        const prior = previous[index] ?? previous.at(-1)
+        return prior ? { id: crypto.randomUUID(), type: prior.type, weightLb: kgToLb(prior.weightKg), reps, rpe: prior.rpe, rir: prior.rir, completed: false } : newSet(0, reps)
+      })
     }
   })
   const [title, setTitle] = useState(initialTitle ?? 'Lower Body Strength')
@@ -63,8 +67,6 @@ export function WorkoutLogger({ onClose, initialTitle, initialExerciseIds }: Wor
       notes: exercise.notes || undefined,
       sets: exercise.sets.map((set): StrengthSet => ({ id: set.id, type: set.type, weightKg: lbToKg(set.weightLb), reps: set.reps || profile.defaultReps, rpe: set.rpe, rir: set.rir, completed: set.completed }))
     }))
-    // Date is read only when the user taps Finish.
-    // eslint-disable-next-line react-hooks/purity
     const finishedAt = Date.now()
     addWorkout({ id: crypto.randomUUID(), profileId: state.activeProfileId, title, date: new Date(finishedAt).toISOString().slice(0, 10), startedAt: new Date(startedAt).toISOString(), durationMin: Math.max(1, Math.round((finishedAt - startedAt) / 60000)), exercises: exercisesToSave, completed: true })
     onClose()
