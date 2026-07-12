@@ -5,6 +5,9 @@ on:
     branches:
       - feature/kinetic-cloud-sync
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -40,6 +43,7 @@ jobs:
           fs.writeFileSync('dist/release-manifest.json', JSON.stringify({ commit: process.env.GITHUB_SHA, files }, null, 2))
           NODE
       - name: Publish static release branch
+        if: github.event_name != 'pull_request'
         run: |
           cp -R dist /tmp/kinetic-dist
           git config user.name "Kinetic Release Bot"
