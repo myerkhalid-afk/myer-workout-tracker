@@ -4,7 +4,9 @@ import { useApp } from '../store/AppContext'
 import { cloudStatus } from '../services/cloud'
 import { downloadBackup, parseBackup } from '../services/backup'
 import { Card, PageHeader, Pill, Sheet } from '../components/Primitives'
+import { Vo2ResultsCard } from '../components/Vo2ResultsCard'
 import { getActiveIdentity } from '../utils/identity'
+import { latestOwnVo2Test } from '../utils/vo2'
 
 function BodyMetricSheet({ onClose }: { onClose: () => void }) {
   const { state, addBodyMetric } = useApp()
@@ -26,7 +28,7 @@ export function ProfilePage() {
   if (!state) return null
   const identity = getActiveIdentity(state, session)
   const profile = identity.profile
-  const vo2 = state.vo2Tests.find((test) => test.profileId === state.activeProfileId)
+  const vo2 = latestOwnVo2Test(state, session)
   const setTheme = (theme: 'dark' | 'light' | 'system') => update((current) => ({ ...current, theme }))
   const importBackup = async (file?: File) => {
     if (!file) return
@@ -40,7 +42,8 @@ export function ProfilePage() {
     <PageHeader eyebrow="Settings & data" title="Profile" />
     <Card className="profile-card"><div className="avatar xlarge">{identity.initials}</div><div><h2>{identity.fullName}</h2><p>{profile?.goal}</p><span>{profile?.heightCm ? `${profile.heightCm} cm · ` : ''}{profile?.weightKg ? `${profile.weightKg} kg · ` : ''}default {profile?.defaultReps ?? 10} reps</span>{session && <small className="profile-email">{session.user.email}</small>}</div><button className="icon-button"><ChevronRight size={19} /></button></Card>
 
-    {vo2 && <Card className="profile-vo2-card"><HeartPulse size={22} /><div><strong>VO₂ max {vo2.vo2Max}</strong><p>{vo2.percentile ? `${vo2.percentile}th percentile · ` : ''}{vo2.labName ?? 'Lab tested'} · {vo2.date}</p></div><Pill tone="success">Lab profile</Pill></Card>}
+    <div className="section-title"><div><span className="eyebrow">Lab & performance</span><h2>Your VO₂ max</h2></div><Pill tone="success"><ShieldCheck size={14} /> Private</Pill></div>
+    {vo2 ? <Vo2ResultsCard test={vo2} /> : <Card className="status-card"><span className="status-icon"><HeartPulse size={20} /></span><div><strong>Your lab result has not loaded yet</strong><p>Keep Kinetic open for a moment or tap Sync now below. Your private cloud record will be restored automatically.</p></div><Pill tone="warning">{syncing ? 'Syncing' : 'Pending'}</Pill></Card>}
 
     <div className="section-title"><div><span className="eyebrow">Quick log</span><h2>Body composition</h2></div></div>
     <button className="list-link" onClick={() => setBodySheet(true)}><span><Scale size={19} /><div><strong>Add measurement</strong><small>Weight, body fat, waist, muscle mass</small></div></span><ChevronRight size={19} /></button>
@@ -52,7 +55,7 @@ export function ProfilePage() {
     <Card className="status-card"><span className="status-icon local"><Database size={20} /></span><div><strong>Offline copy on this device</strong><p>Logging keeps working without a signal. Changes sync when connectivity returns.</p></div><Pill tone="success">Active</Pill></Card>
     <Card className="status-card"><span className="status-icon"><Cloud size={20} /></span><div><strong>{session ? 'Private cloud account connected' : 'Cloud account not connected'}</strong><p>{session ? cloudStatus.reason : 'Sign in to share workouts with your partner and restore data on another device.'}</p></div><Pill tone={session ? 'success' : 'warning'}>{syncing ? 'Syncing' : session ? 'Secure' : 'Offline'}</Pill></Card>
     {cloudError && <div className="notice"><Info size={17} /> {cloudError}</div>}
-    {session && <div className="cloud-actions"><button onClick={() => void runSync()} disabled={syncing}><RefreshCw size={18} className={syncing ? 'spin' : ''} /><span><strong>Sync now</strong><small>Push local changes and pull partner activity</small></span></button><button onClick={() => void signOut()}><LogOut size={18} /><span><strong>Sign out</strong><small>Local offline copy remains on this device</small></span></button></div>}
+    {session && <div className="cloud-actions"><button onClick={() => void runSync()} disabled={syncing}><RefreshCw size={18} className={syncing ? 'spin' : ''} /><span><strong>Sync now</strong><small>Push local changes and pull your private lab profile</small></span></button><button onClick={() => void signOut()}><LogOut size={18} /><span><strong>Sign out</strong><small>Local offline copy remains on this device</small></span></button></div>}
 
     <div className="backup-grid"><button onClick={() => downloadBackup(state)}><Download size={19} /><span><strong>Export backup</strong><small>Complete JSON copy</small></span></button><button onClick={() => fileRef.current?.click()}><Upload size={19} /><span><strong>Import backup</strong><small>Restore and sync</small></span></button></div>
     <input ref={fileRef} hidden type="file" accept="application/json" onChange={(event) => void importBackup(event.target.files?.[0])} />
