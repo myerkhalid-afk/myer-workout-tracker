@@ -24,7 +24,21 @@ jobs:
           sed -i 's#https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/#https://registry.npmjs.org/#g' package-lock.json
           npm ci --no-audit --no-fund
       - name: Run tests
-        run: npm test
+        id: tests
+        continue-on-error: true
+        run: npm test > test.log 2>&1
+      - name: Upload test diagnostics
+        if: steps.tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinetic-test-log
+          path: test.log
+          if-no-files-found: error
+      - name: Stop on test failure
+        if: steps.tests.outcome == 'failure'
+        run: |
+          cat test.log
+          exit 1
       - name: Build production PWA
         run: npm run build
       - name: Normalize release metadata
