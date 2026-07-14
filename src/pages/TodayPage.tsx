@@ -50,7 +50,9 @@ export function TodayPage() {
     ...state.cardio.filter((c) => c.profileId === state.activeProfileId && !c.linkedWorkoutId).map((c) => ({ date: c.date, type: 'Cardio', title: c.type[0].toUpperCase() + c.type.slice(1), detail: `${Math.round(c.durationMin)} min${c.distanceKm ? ` · ${c.distanceKm} km` : ''}`, icon: Bike }))
   ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3)
   const totalSets = state.workouts.filter((w) => w.profileId === state.activeProfileId).flatMap((w) => w.exercises).flatMap((e) => e.sets).filter((s) => s.completed && s.type !== 'warmup').length
-  const recentWorkout = state.workouts.find((w) => w.profileId === state.activeProfileId)
+  const recentWorkout = [...state.workouts]
+    .filter((w) => w.profileId === state.activeProfileId)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
   const recentVolume = recentWorkout?.exercises.reduce((sum, e) => sum + e.sets.filter((set) => set.completed && set.type !== 'warmup').reduce((s, set) => s + set.weightKg * set.reps, 0), 0) ?? 0
   const coachExercises = COACH_WORKOUTS[recommendation.title]
 
