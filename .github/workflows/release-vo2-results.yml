@@ -1,0 +1,39 @@
+name: Release VO2 results fix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: cp public/manifest.webmanifest dist/manifest.webmanifest
+      - name: Publish static branch
+        run: |
+          SOURCE_SHA=$(git rev-parse HEAD)
+          cp -R dist /tmp/kinetic-dist
+          printf '%s\n' "$SOURCE_SHA" > /tmp/kinetic-dist/release-source.txt
+          git config user.name "Kinetic Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan release-static-worktree
+          git rm -rf .
+          git clean -fdx
+          cp -R /tmp/kinetic-dist/. .
+          git add -A
+          git commit -m "release: Kinetic VO2 results ${SOURCE_SHA}"
+          git push origin HEAD:release/kinetic-static --force
