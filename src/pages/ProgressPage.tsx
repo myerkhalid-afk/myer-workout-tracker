@@ -3,11 +3,13 @@ import { useMemo } from 'react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import { Card, PageHeader, Pill } from '../components/Primitives'
+import { Vo2ResultsCard } from '../components/Vo2ResultsCard'
 import { useApp } from '../store/AppContext'
 import { exerciseById } from '../data/exercises'
+import { latestOwnVo2Test } from '../utils/vo2'
 
 export function ProgressPage() {
-  const { state } = useApp()
+  const { state, session } = useApp()
   const profileId = state?.activeProfileId ?? ''
   const body = [...(state?.bodyMetrics ?? [])].filter((b) => b.profileId === profileId).sort((a, b) => a.date.localeCompare(b.date))
   const weightData = body.map((b) => ({ date: format(parseISO(b.date), 'MMM'), weight: b.weightKg, fat: b.bodyFatPct }))
@@ -22,6 +24,7 @@ export function ProgressPage() {
   const currentWeight = body.at(-1)?.weightKg ?? 85
   const firstWeight = body[0]?.weightKg ?? currentWeight
   const latestFat = [...body].reverse().find((b) => b.bodyFatPct)?.bodyFatPct
+  const vo2 = state ? latestOwnVo2Test(state, session) : undefined
 
   const muscleFrequency = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -32,6 +35,8 @@ export function ProgressPage() {
   if (!state) return null
   return <>
     <PageHeader eyebrow="See the signal" title="Progress" action={<button className="date-chip"><CalendarDays size={16} /> 90 days</button>} />
+    {vo2 && <Vo2ResultsCard test={vo2} />}
+
     <div className="progress-hero">
       <Card><span className="stat-icon"><Scale size={18} /></span><div><small>Current weight</small><strong>{currentWeight.toFixed(1)} <em>kg</em></strong><span className="trend good"><TrendingDown size={14} /> {(firstWeight - currentWeight).toFixed(1)} kg</span></div></Card>
       <Card><span className="stat-icon"><Activity size={18} /></span><div><small>Body fat</small><strong>{latestFat?.toFixed(1) ?? '—'}<em>%</em></strong><span className="trend good">Lean mass stable</span></div></Card>
@@ -60,7 +65,7 @@ export function ProgressPage() {
     <Card className="frequency-card">{muscleFrequency.map(({ muscle, sessions }) => <div key={muscle}><span>{muscle}</span><div className="frequency-bar"><i style={{ width: `${Math.min(100, sessions * 18)}%` }} /></div><strong>{sessions}</strong></div>)}</Card>
 
     <div className="section-title"><div><span className="eyebrow">Milestones</span><h2>Personal records</h2></div></div>
-    <div className="record-grid"><Card><span><Award size={21} /></span><strong>320 lb</strong><small>Leg Press · 12 reps</small></Card><Card><span><Award size={21} /></span><strong>160 km</strong><small>Longest 2026 ride</small></Card><Card><span><Award size={21} /></span><strong>57.2</strong><small>Lab VO₂ max</small></Card><Card><span><Award size={21} /></span><strong>90 sec</strong><small>Longest plank</small></Card></div>
+    <div className="record-grid"><Card><span><Award size={21} /></span><strong>320 lb</strong><small>Leg Press · 12 reps</small></Card><Card><span><Award size={21} /></span><strong>160 km</strong><small>Longest 2026 ride</small></Card><Card><span><Award size={21} /></span><strong>{vo2?.vo2Max.toFixed(1) ?? '—'}</strong><small>Lab VO₂ max</small></Card><Card><span><Award size={21} /></span><strong>90 sec</strong><small>Longest plank</small></Card></div>
 
     <button className="list-link"><span><Activity size={19} /><div><strong>Open Fitness Timeline</strong><small>Every workout, scan, check-in and PR</small></div></span><ChevronRight size={19} /></button>
   </>

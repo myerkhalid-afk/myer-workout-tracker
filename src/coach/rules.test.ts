@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { generateInsights, readinessScore, recommendToday } from './rules'
 import type { KineticState } from '../types'
 
@@ -36,10 +36,16 @@ describe('Kinetic deterministic coach', () => {
   })
 
   it('recommends recovery after a current lower-body session', () => {
-    const recommendation = recommendToday(fixture)
-    expect(recommendation.decision).toBe('recover')
-    expect(recommendation.title).toMatch(/Zone 2 cycling/i)
-    expect(recommendation.cardio?.target).toMatch(/143–153 bpm/)
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-12T12:00:00'))
+    try {
+      const recommendation = recommendToday(fixture)
+      expect(recommendation.decision).toBe('recover')
+      expect(recommendation.title).toMatch(/Zone 2 cycling/i)
+      expect(recommendation.cardio?.target).toMatch(/143–153 bpm/)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('surfaces real session, weight and zone insights', () => {
