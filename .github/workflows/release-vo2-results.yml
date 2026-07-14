@@ -23,7 +23,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: cp public/manifest.webmanifest dist/manifest.webmanifest
-      - name: Publish static branch
+      - name: Publish static branch and immutable tag
         run: |
           SOURCE_SHA=$(git rev-parse HEAD)
           cp -R dist /tmp/kinetic-dist
@@ -36,4 +36,6 @@ jobs:
           cp -R /tmp/kinetic-dist/. .
           git add -A
           git commit -m "release: Kinetic VO2 results ${SOURCE_SHA}"
+          git tag -f kinetic-vo2-20260714
           git push origin HEAD:release/kinetic-static --force
+          git push origin refs/tags/kinetic-vo2-20260714 --force
